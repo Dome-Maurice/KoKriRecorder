@@ -8,7 +8,7 @@
 // Konstanten für I2S
 #define I2S_WS_PIN      12       // Word Select (WS) Pin
 #define I2S_SCK_PIN     13       // Serial Clock (SCK) Pin
-#define I2S_SD_PIN      14       // Serial Data (SD) Pin
+#define I2S_SD_PIN      11       // Serial Data (SD) Pin
 #define I2S_PORT        I2S_NUM_0
 #define SAMPLE_RATE     16000    // Sample Rate in Hz (16kHz)
 #define BUFFER_SIZE     1024     // Größe des Aufnahmepuffers
@@ -61,7 +61,7 @@ SemaphoreHandle_t sdCardMutex;   // Mutex für SD-Karten-Zugriff
 // uint16_t ftp_port = 21;
 
 // Prototypen
-void initI2S();
+bool initI2S();
 void initSDCard();
 void initLED();
 bool startRecording();
@@ -115,9 +115,26 @@ void setup() {
   uploadQueue = xQueueCreate(10, MAX_FILENAME_LEN * sizeof(char));
   
   // I2S und SD-Karte initialisieren
-  initI2S();
+  bool micOk = initI2S();
   initSDCard();
   
+  if (!micOk) {
+    // Mindestens eine Komponente hat Fehler
+    Serial.println("Initialisierung fehlgeschlagen. System nicht bereit.");
+    
+    // Zeige Fehler mit speziellem Blinkmuster
+    while (true) {
+      // Blinke rot-orange, wenn nur das Mikrofon fehlerhaft ist
+      // Blinke blau-orange, wenn nur die SD-Karte fehlerhaft ist
+      // Blinke rot-blau, wenn beide fehlerhaft sind
+      if (!micOk) setLEDStatus(CRGB(255, 0, 0));  // Rot für Mikrofon-Fehler
+//      else if (!sdOk) setLEDStatus(CRGB(0, 0, 255));  // Blau für SD-Fehler
+      delay(500);
+      setLEDStatus(COLOR_ERROR);  // Orange als zweite Farbe
+      delay(500);
+    }
+  }
+
   // Starte Upload-Task mit niedrigerer Priorität
   xTaskCreate(
     uploadTask,
@@ -154,7 +171,7 @@ void loop() {
 }
 
 void initLED() {
-  Serial.println("Initialisiere WS2812-LED...");
+  //Serial.println("Initialisiere WS2812-LED...");
   
   // FastLED-Setup
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS)
@@ -168,11 +185,11 @@ void initLED() {
   fill_solid(leds, NUM_LEDS, CRGB::Black);
   FastLED.show();
   
-  Serial.println("WS2812-LED initialisiert");
+  //Serial.println("WS2812-LED initialisiert");
 }
 
-void initI2S() {
-  Serial.println("Initialisiere I2S...");
+bool initI2S() {
+  Serial.println("Initialisiere I2S-Mikrofon...");
   
   // I2S-Konfiguration
   i2s_config_t i2s_config = {
@@ -197,22 +214,116 @@ void initI2S() {
     .data_in_num = I2S_SD_PIN
   };
   
-  // I2S-Treiber installieren und starten
+  // I2S-Treiber installieren
   esp_err_t err = i2s_driver_install(I2S_PORT, &i2s_config, 0, NULL);
   if (err != ESP_OK) {
     Serial.printf("Fehler bei der I2S-Treiberinstallation: %d\n", err);
-    setLEDStatus(COLOR_ERROR);
-    return;
+    
+    // Detaillierteres Error-Handling
+    switch(err) {
+      case ESP_ERR_INVALID_ARG:
+        Serial.println("Ungültige Argumente für i2s_driver_install");
+        break;
+      case ESP_ERR_NO_MEM:
+        Serial.println("Nicht genügend Speicher für I2S-Treiber");
+        break;
+      case ESP_ERR_INVALID_STATE:
+        Serial.println("I2S-Treiber bereits installiert");
+        // Versuche, den Treiber zu deinstallieren und erneut zu installieren
+        i2s_driver_uninstall(I2S_PORT);
+        err = i2s_driver_install(I2S_PORT, &i2s_config, 0, NULL);
+        if (err != ESP_OK) {
+          Serial.println("Erneute Installation fehlgeschlagen");
+          setLEDStatus(COLOR_ERROR);
+          return false;
+        }
+        Serial.println("I2S-Treiber neu installiert");
+        break;
+      default:
+        Serial.println("Unbekannter I2S-Treiberfehler");
+        break;
+    }
+    
+    if (err != ESP_OK) {
+      setLEDStatus(COLOR_ERROR);
+      return false;
+    }
   }
   
+  // I2S-Pins konfigurieren
   err = i2s_set_pin(I2S_PORT, &pin_config);
   if (err != ESP_OK) {
     Serial.printf("Fehler bei der I2S-Pin-Konfiguration: %d\n", err);
+    
+    // Detaillierteres Error-Handling für Pin-Konfiguration
+    switch(err) {
+      case ESP_ERR_INVALID_ARG:
+        Serial.println("Ungültige Pin-Konfiguration");
+        // Prüfe, ob Pins bereits für andere Funktionen verwendet werden
+        Serial.printf("Prüfe Pins: SCK=%d, WS=%d, SD=%d\n", I2S_SCK_PIN, I2S_WS_PIN, I2S_SD_PIN);
+        break;
+      default:
+        Serial.println("Unbekannter Pin-Konfigurationsfehler");
+        break;
+    }
+    
+    // Bereinige bei Fehler
+    i2s_driver_uninstall(I2S_PORT);
     setLEDStatus(COLOR_ERROR);
-    return;
+    return false;
   }
   
-  Serial.println("I2S initialisiert");
+  // Teste das Mikrofon mit einer Probeaufnahme
+  Serial.println("Teste Mikrofon...");
+  int32_t samples[64];
+  size_t bytesRead = 0;
+  
+  // Versuche, einige Samples zu lesen
+  err = i2s_read(I2S_PORT, &samples, sizeof(samples), &bytesRead, pdMS_TO_TICKS(1000));
+  
+  if (err != ESP_OK || bytesRead == 0) {
+    Serial.printf("Mikrofon-Test fehlgeschlagen. Fehler: %d, Bytes gelesen: %d\n", err, bytesRead);
+    Serial.println("Überprüfe die Verkabelung des Mikrofons und starte neu.");
+    
+    // LED-Fehlermuster: Schnelles Blinken in Orange
+    for (int i = 0; i < 5; i++) {
+      setLEDStatus(COLOR_ERROR);
+      delay(100);
+      setLEDStatus(CRGB::Black);
+      delay(100);
+    }
+    
+    i2s_driver_uninstall(I2S_PORT);
+    return false;
+  }
+  
+  // Teste Signalstärke (optionales erweitertes Testing)
+  int32_t maxValue = 0;
+  for (int i = 0; i < bytesRead / 4; i++) {
+    int32_t absValue = abs(samples[i]);
+    if (absValue > maxValue) {
+      maxValue = absValue;
+    }
+  }
+  
+  // Prüfe, ob das Signal zu schwach ist
+  if (maxValue < 1000) { // Anpassbarer Schwellenwert
+    Serial.println("Warnung: Sehr schwaches oder kein Mikrofonsignal erkannt.");
+    Serial.println("Überprüfe die Mikrofonverbindung oder erhöhe die Verstärkung.");
+    
+    // Gelbe Warnung (aber kein Fehler)
+    for (int i = 0; i < 3; i++) {
+      setLEDStatus(CRGB(255, 255, 0)); // Gelb
+      delay(200);
+      setLEDStatus(CRGB::Black);
+      delay(200);
+    }
+  } else {
+    Serial.printf("Mikrofon-Test erfolgreich. Max Amplitude: %d\n", maxValue);
+  }
+  
+  Serial.println("I2S-Mikrofon erfolgreich initialisiert");
+  return true;
 }
 
 void initSDCard() {
@@ -467,8 +578,8 @@ void recordingTask(void* parameter) {
     xSemaphoreGive(sdCardMutex);
     
     Serial.printf("Aufnahme beendet: %s\n", filename);
-    Serial.printf("Aufnahmedauer: %lu ms\n", recordingDuration);
-    Serial.printf("Dateigröße: %lu Bytes\n", dataSize + 44); // 44 Bytes für WAV-Header
+    Serial.printf("Aufnahmedauer: %lu s\n", recordingDuration/1000);
+    Serial.printf("Dateigröße: %lu kB\n", (dataSize + 44)/1000); // 44 Bytes für WAV-Header
     
     // Dateinamen zur Upload-Queue hinzufügen
     char uploadFilename[MAX_FILENAME_LEN];
@@ -518,7 +629,7 @@ void uploadTask(void* parameter) {
         
         if (fileToUpload) {
           uint32_t fileSize = fileToUpload.size();
-          Serial.printf("Datei zum Upload: %s, Größe: %u Bytes\n", uploadFilename, fileSize);
+          Serial.printf("Datei zum Upload: %s, Größe: %u kB\n", uploadFilename, fileSize/1000);
           
           // Gebe den SD-Karten-Zugriff frei, während wir andere Dinge tun
           xSemaphoreGive(sdCardMutex);
