@@ -5,6 +5,7 @@
 #include <SPI.h>
 #include <FastLED.h>  // FastLED-Bibliothek für WS2812-LED
 
+
 // Konstanten für I2S
 #define I2S_WS_PIN      12       // Word Select (WS) Pin
 #define I2S_SCK_PIN     13       // Serial Clock (SCK) Pin
@@ -60,9 +61,11 @@ SemaphoreHandle_t sdCardMutex;   // Mutex für SD-Karten-Zugriff
 // const char* ftp_password = "";
 // uint16_t ftp_port = 21;
 
+#include <readconfig.h>
+
 // Prototypen
 bool initI2S();
-void initSDCard();
+bool initSDCard();
 void initLED();
 bool startRecording();
 void stopRecording();
@@ -116,9 +119,11 @@ void setup() {
   
   // I2S und SD-Karte initialisieren
   bool micOk = initI2S();
-  initSDCard();
-  
-  if (!micOk) {
+  bool sdOk = initSDCard();
+  delay(50);
+  bool configReadOk = loadConfigFromSD();
+
+  if (!micOk || !sdOk || !configReadOk) {
     // Mindestens eine Komponente hat Fehler
     Serial.println("Initialisierung fehlgeschlagen. System nicht bereit.");
     
@@ -127,13 +132,20 @@ void setup() {
       // Blinke rot-orange, wenn nur das Mikrofon fehlerhaft ist
       // Blinke blau-orange, wenn nur die SD-Karte fehlerhaft ist
       // Blinke rot-blau, wenn beide fehlerhaft sind
-      if (!micOk) setLEDStatus(CRGB(255, 0, 0));  // Rot für Mikrofon-Fehler
-//      else if (!sdOk) setLEDStatus(CRGB(0, 0, 255));  // Blau für SD-Fehler
+      if (!micOk){
+        setLEDStatus(CRGB(255, 0, 0));  // Rot für Mikrofon-Fehler
+      }else if (!sdOk){
+        setLEDStatus(CRGB(0, 0, 255));  // Blau für SD-Fehler
+      }else if(!configReadOk){
+        setLEDStatus(CRGB(0, 255, 255)); // Türkis für Config Lese fehler
+      }
       delay(500);
       setLEDStatus(COLOR_ERROR);  // Orange als zweite Farbe
       delay(500);
     }
   }
+
+  
 
   // Starte Upload-Task mit niedrigerer Priorität
   xTaskCreate(
@@ -161,7 +173,7 @@ void loop() {
   // Wenn wir nicht aufnehmen, LED pulsieren lassen
   if (!isRecording) {
     static uint32_t lastPulseTime = 0;
-    if (millis() - lastPulseTime > 3000) {  // Alle 3 Sekunden pulsieren
+    if (millis() - lastPulseTime > 500) {  // Alle 3 Sekunden pulsieren
       pulseLED(COLOR_READY);
       lastPulseTime = millis();
     }
@@ -189,7 +201,6 @@ void initLED() {
 }
 
 bool initI2S() {
-  Serial.println("Initialisiere I2S-Mikrofon...");
   
   // I2S-Konfiguration
   i2s_config_t i2s_config = {
@@ -199,7 +210,7 @@ bool initI2S() {
     .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
     .communication_format = I2S_COMM_FORMAT_STAND_I2S,
     .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-    .dma_buf_count = 4,
+    .dma_buf_count = 8,
     .dma_buf_len = BUFFER_SIZE,
     .use_apll = false,
     .tx_desc_auto_clear = false,
@@ -273,61 +284,11 @@ bool initI2S() {
     return false;
   }
   
-  // Teste das Mikrofon mit einer Probeaufnahme
-  Serial.println("Teste Mikrofon...");
-  int32_t samples[64];
-  size_t bytesRead = 0;
-  
-  // Versuche, einige Samples zu lesen
-  err = i2s_read(I2S_PORT, &samples, sizeof(samples), &bytesRead, pdMS_TO_TICKS(1000));
-  
-  if (err != ESP_OK || bytesRead == 0) {
-    Serial.printf("Mikrofon-Test fehlgeschlagen. Fehler: %d, Bytes gelesen: %d\n", err, bytesRead);
-    Serial.println("Überprüfe die Verkabelung des Mikrofons und starte neu.");
-    
-    // LED-Fehlermuster: Schnelles Blinken in Orange
-    for (int i = 0; i < 5; i++) {
-      setLEDStatus(COLOR_ERROR);
-      delay(100);
-      setLEDStatus(CRGB::Black);
-      delay(100);
-    }
-    
-    i2s_driver_uninstall(I2S_PORT);
-    return false;
-  }
-  
-  // Teste Signalstärke (optionales erweitertes Testing)
-  int32_t maxValue = 0;
-  for (int i = 0; i < bytesRead / 4; i++) {
-    int32_t absValue = abs(samples[i]);
-    if (absValue > maxValue) {
-      maxValue = absValue;
-    }
-  }
-  
-  // Prüfe, ob das Signal zu schwach ist
-  if (maxValue < 1000) { // Anpassbarer Schwellenwert
-    Serial.println("Warnung: Sehr schwaches oder kein Mikrofonsignal erkannt.");
-    Serial.println("Überprüfe die Mikrofonverbindung oder erhöhe die Verstärkung.");
-    
-    // Gelbe Warnung (aber kein Fehler)
-    for (int i = 0; i < 3; i++) {
-      setLEDStatus(CRGB(255, 255, 0)); // Gelb
-      delay(200);
-      setLEDStatus(CRGB::Black);
-      delay(200);
-    }
-  } else {
-    Serial.printf("Mikrofon-Test erfolgreich. Max Amplitude: %d\n", maxValue);
-  }
-  
-  Serial.println("I2S-Mikrofon erfolgreich initialisiert");
+  Serial.println("I2S-Mikrofon initialisiert");
   return true;
 }
 
-void initSDCard() {
-  Serial.println("Initialisiere SD-Karte...");
+bool initSDCard() {
 
   if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
     // SPI Konfiguration für SD-Karte
@@ -337,7 +298,7 @@ void initSDCard() {
       Serial.println("SD-Karten-Initialisierung fehlgeschlagen!");
       setLEDStatus(COLOR_ERROR);
       xSemaphoreGive(sdCardMutex);
-      return;
+      return false;
     }
     
     uint8_t cardType = SD.cardType();
@@ -345,7 +306,7 @@ void initSDCard() {
       Serial.println("Keine SD-Karte gefunden!");
       setLEDStatus(COLOR_ERROR);
       xSemaphoreGive(sdCardMutex);
-      return;
+      return false;
     }
     
     Serial.print("SD-Kartentyp: ");
@@ -358,19 +319,22 @@ void initSDCard() {
     } else {
       Serial.println("UNKNOWN");
     }
-    
+
+    Serial.println("SD-Karte initialisiert");
     uint64_t cardSize = SD.cardSize() / (1024 * 1024);
     Serial.printf("SD-Kartengröße: %lluMB\n", cardSize);
-    Serial.println("SD-Karte initialisiert");
     
     xSemaphoreGive(sdCardMutex);
   }
+
+  return true; 
 }
 
 bool startRecording() {
   // Generiere einen eindeutigen Dateinamen basierend auf der aktuellen Zeit
   unsigned long currentTime = millis();
-  sprintf(filename, "/REC_%08lu.wav", currentTime);
+  sprintf(filename, "/%s_%08lu.wav", config.deviceName, currentTime);
+  //sprintf(filename, "/REC_%08lu.wav", currentTime);
   
   Serial.printf("Starte Aufnahme: %s\n", filename);
   
@@ -507,6 +471,11 @@ void pulseLED(CRGB color) {
 void recordingTask(void* parameter) {
   Serial.println("Aufnahme-Task gestartet");
   
+  // Variablen für Nachhalleffekt
+  uint8_t currentBrightness = 64;
+  uint8_t targetBrightness = 64;
+  float decayFactor = 0.8;  // Nachklangfaktor: Höher = längerer Nachklang
+
   while (isRecording) {
     // Audio aufnehmen und auf SD-Karte schreiben
     int32_t samples[BUFFER_SIZE];
@@ -518,13 +487,26 @@ void recordingTask(void* parameter) {
     if (result == ESP_OK && bytesRead > 0 && isRecording) {
       // Konvertiere 32-bit INMP441 Daten zu 16-bit PCM für WAV
       int16_t pcmData[BUFFER_SIZE];
-      
+
+      // Audio-Pegel für LED-Steuerung berechnen
+      int32_t sum = 0;
+      int32_t peak = 0;
+
       // Konvertierung und Normalisierung der Samples
       for (int i = 0; i < bytesRead / 4; i++) {
         // INMP441 liefert Daten im Bereich links ausgerichtet (MSB),
         // wir müssen sie um 8 Bits nach rechts verschieben und auf 16 Bit reduzieren
         int32_t sample = samples[i] >> 8;
         
+        // Audio-Pegel berechnen (absoluter Wert des Samples)
+        int32_t absSample = abs(sample);
+        sum += absSample;
+
+        // Peak aktualisieren
+        if (absSample > peak) {
+          peak = absSample;
+        }
+
         // Begrenze auf 16-bit Signed Integer Bereich
         if (sample > 32767) sample = 32767;
         if (sample < -32768) sample = -32768;
@@ -532,6 +514,41 @@ void recordingTask(void* parameter) {
         pcmData[i] = (int16_t)sample;
       }
       
+      // LED-Helligkeit basierend auf Audio-Pegel anpassen
+      int numSamples = bytesRead / 4;
+      if (numSamples > 0) {
+        // Berechne Durchschnitt und skaliere ihn
+        int32_t average = sum / numSamples;
+        
+        // Kombiniere Durchschnitt und Peak für dynamischeres Verhalten
+        // Peak stärker gewichten für bessere visuelle Reaktion
+        int32_t combinedLevel = average * 0.3 + peak * 0.9;
+        
+        // Skaliere auf 64-255 für Helligkeit, mit stärkerer Skalierung
+        targetBrightness = constrain(64 + (combinedLevel / 80), 64, 255);
+        
+        // Nachhall-Effekt: Langsam zum Zielwert bewegen
+        if (targetBrightness > currentBrightness) {
+          // Schnell heller werden (bei lautem Ton)
+          currentBrightness = targetBrightness;
+        } else {
+          // Langsam dunkler werden (Nachhall)
+          currentBrightness = currentBrightness * decayFactor + targetBrightness * (1 - decayFactor);
+        }
+        
+        // LED auf Rot setzen mit berechneter Helligkeit
+        leds[0] = COLOR_RECORDING;
+        
+        // Für deutlichere Reaktion bei hohen Pegeln: Färbung leicht ändern
+        if (currentBrightness > 180) {
+          // Bei hoher Lautstärke etwas mehr ins Orange gehen
+          leds[0].g = map(currentBrightness, 180, 255, 0, 70);
+        }
+        
+        FastLED.setBrightness(currentBrightness);
+        FastLED.show();
+      }
+
       if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
         // Schreibe konvertierte Daten auf SD-Karte
         size_t bytesToWrite = bytesRead / 2; // 16-bit anstatt 32-bit
@@ -548,18 +565,6 @@ void recordingTask(void* parameter) {
         xSemaphoreGive(sdCardMutex);
       }
       
-      // LED-Pulsieren während der Aufnahme
-      // Einfache Helligkeitsänderung für die rote LED
-      static uint8_t brightness = 128;
-      static int8_t direction = 1;
-      
-      brightness += direction * 4;
-      if (brightness >= 200 || brightness <= 80) {
-        direction = -direction;
-      }
-      
-      FastLED.setBrightness(brightness);
-      FastLED.show();
     }
     
     // Kurze Verzögerung, um anderen Tasks CPU-Zeit zu geben
