@@ -199,7 +199,7 @@ bool initI2S() {
     .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
     .communication_format = I2S_COMM_FORMAT_STAND_I2S,
     .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-    .dma_buf_count = 8,
+    .dma_buf_count = 4,
     .dma_buf_len = BUFFER_SIZE,
     .use_apll = false,
     .tx_desc_auto_clear = false,
