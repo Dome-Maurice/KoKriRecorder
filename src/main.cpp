@@ -13,13 +13,13 @@
 #include "led.h"
 #include "ftp.h"
 #include "button.h"
- 
+#include "sdcard.h" 
+#include "mic.h" 
+
 // Globale Variablen
 bool isRecording = false;        // Aufnahmestatus
 CRGB leds[NUM_LEDS];             // Array für WS2812-LED
 
-#include "sdcard.h" 
-#include "mic.h" 
 
 Button recordButton(RECORD_BUTTON_PIN, 300);
 
