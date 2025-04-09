@@ -3,40 +3,28 @@
 #include <SD.h>
 #include <FS.h>
 #include <SPI.h>
-#include <FastLED.h>  // FastLED-Bibliothek für WS2812-LED
+#include <FastLED.h>
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 
 #include "config.h"
 #include "readconfig.h"
 #include "webserver.h"
-
+ 
 // Globale Variablen
 bool isRecording = false;        // Aufnahmestatus
-uint32_t recordingStartTime = 0; // Startzeit der Aufnahme
-char filename[MAX_FILENAME_LEN]; // Dateiname für die WAV-Datei
-File wavFile;                    // Datei-Handle für WAV-Datei
-unsigned long fileSize = 0;      // Größe der Datei (für WAV-Header)
-unsigned long dataSize = 0;      // Größe der Audio-Daten
+
 CRGB leds[NUM_LEDS];             // Array für WS2812-LED
 
-// Queue für FTP-Upload-Tasks
-QueueHandle_t uploadQueue;
-SemaphoreHandle_t sdCardMutex;   // Mutex für SD-Karten-Zugriff
-
-// Prototypen
-bool initI2S();
-bool initSDCard();
-void initLED();
-bool startRecording();
-void stopRecording();
-void writeWAVHeader();
-void updateWAVHeader();
+// Prototypen für in main.cpp verbleibende Funktionen
 void handleButton();
 void setLEDStatus(CRGB color);
 void pulseLED(CRGB color);
-void recordingTask(void* parameter);
+void initLED();
 void uploadTask(void* parameter);
+
+#include "sdcard.h" 
+#include "mic.h" 
 
 void setup() {
   Serial.begin(115200);
@@ -141,223 +129,6 @@ void initLED() {
   //Serial.println("WS2812-LED initialisiert");
 }
 
-bool initI2S() {
-  
-  // I2S-Konfiguration
-  i2s_config_t i2s_config = {
-    .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
-    .sample_rate = SAMPLE_RATE,
-    .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
-    .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
-    .communication_format = I2S_COMM_FORMAT_STAND_I2S,
-    .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-    .dma_buf_count = 8,
-    .dma_buf_len = BUFFER_SIZE,
-    .use_apll = false,
-    .tx_desc_auto_clear = false,
-    .fixed_mclk = 0
-  };
-  
-  // I2S-Pin-Konfiguration
-  i2s_pin_config_t pin_config = {
-    .bck_io_num = I2S_SCK_PIN,
-    .ws_io_num = I2S_WS_PIN,
-    .data_out_num = I2S_PIN_NO_CHANGE,
-    .data_in_num = I2S_SD_PIN
-  };
-  
-  // I2S-Treiber installieren
-  esp_err_t err = i2s_driver_install(I2S_PORT, &i2s_config, 0, NULL);
-  if (err != ESP_OK) {
-    Serial.printf("Fehler bei der I2S-Treiberinstallation: %d\n", err);
-    
-    // Detaillierteres Error-Handling
-    switch(err) {
-      case ESP_ERR_INVALID_ARG:
-        Serial.println("Ungültige Argumente für i2s_driver_install");
-        break;
-      case ESP_ERR_NO_MEM:
-        Serial.println("Nicht genügend Speicher für I2S-Treiber");
-        break;
-      case ESP_ERR_INVALID_STATE:
-        Serial.println("I2S-Treiber bereits installiert");
-        // Versuche, den Treiber zu deinstallieren und erneut zu installieren
-        i2s_driver_uninstall(I2S_PORT);
-        err = i2s_driver_install(I2S_PORT, &i2s_config, 0, NULL);
-        if (err != ESP_OK) {
-          Serial.println("Erneute Installation fehlgeschlagen");
-          setLEDStatus(COLOR_ERROR);
-          return false;
-        }
-        Serial.println("I2S-Treiber neu installiert");
-        break;
-      default:
-        Serial.println("Unbekannter I2S-Treiberfehler");
-        break;
-    }
-    
-    if (err != ESP_OK) {
-      setLEDStatus(COLOR_ERROR);
-      return false;
-    }
-  }
-  
-  // I2S-Pins konfigurieren
-  err = i2s_set_pin(I2S_PORT, &pin_config);
-  if (err != ESP_OK) {
-    Serial.printf("Fehler bei der I2S-Pin-Konfiguration: %d\n", err);
-    
-    // Detaillierteres Error-Handling für Pin-Konfiguration
-    switch(err) {
-      case ESP_ERR_INVALID_ARG:
-        Serial.println("Ungültige Pin-Konfiguration");
-        // Prüfe, ob Pins bereits für andere Funktionen verwendet werden
-        Serial.printf("Prüfe Pins: SCK=%d, WS=%d, SD=%d\n", I2S_SCK_PIN, I2S_WS_PIN, I2S_SD_PIN);
-        break;
-      default:
-        Serial.println("Unbekannter Pin-Konfigurationsfehler");
-        break;
-    }
-    
-    // Bereinige bei Fehler
-    i2s_driver_uninstall(I2S_PORT);
-    setLEDStatus(COLOR_ERROR);
-    return false;
-  }
-  
-  Serial.println("I2S-Mikrofon initialisiert");
-  return true;
-}
-
-bool initSDCard() {
-
-  if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
-    // SPI Konfiguration für SD-Karte
-    SPI.begin(SD_SCK_PIN, SD_MISO_PIN, SD_MOSI_PIN);
-    
-    if (!SD.begin(SD_CS_PIN)) {
-      Serial.println("SD-Karten-Initialisierung fehlgeschlagen!");
-      setLEDStatus(COLOR_ERROR);
-      xSemaphoreGive(sdCardMutex);
-      return false;
-    }
-    
-    uint8_t cardType = SD.cardType();
-    if (cardType == CARD_NONE) {
-      Serial.println("Keine SD-Karte gefunden!");
-      setLEDStatus(COLOR_ERROR);
-      xSemaphoreGive(sdCardMutex);
-      return false;
-    }
-    
-    Serial.print("SD-Kartentyp: ");
-    if (cardType == CARD_MMC) {
-      Serial.println("MMC");
-    } else if (cardType == CARD_SD) {
-      Serial.println("SDSC");
-    } else if (cardType == CARD_SDHC) {
-      Serial.println("SDHC");
-    } else {
-      Serial.println("UNKNOWN");
-    }
-
-    Serial.println("SD-Karte initialisiert");
-    uint64_t cardSize = SD.cardSize() / (1024 * 1024);
-    Serial.printf("SD-Kartengröße: %lluMB\n", cardSize);
-    
-    xSemaphoreGive(sdCardMutex);
-  }
-
-  return true; 
-}
-
-bool startRecording() {
-  
-  Serial.printf("Starte Aufnahme: %s\n", tempFilename);
-
-  if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
-    // Öffne die Datei zum Schreiben
-    wavFile = SD.open(tempFilename, FILE_WRITE);
-
-    
-    if (!wavFile) {
-      Serial.println("Fehler beim Öffnen der temporären Datei!");
-      setLEDStatus(COLOR_ERROR);
-      xSemaphoreGive(sdCardMutex);
-      return false;
-    }
-    
-    // WAV-Header schreiben
-    writeWAVHeader();
-    xSemaphoreGive(sdCardMutex);
-    
-    dataSize = 0;
-    recordingStartTime = millis();
-    isRecording = true;
-    
-    // LED auf Aufnahme-Status setzen
-    setLEDStatus(COLOR_RECORDING);
-    
-    // Starte den Aufnahme-Task mit hoher Priorität
-    xTaskCreate(
-      recordingTask,
-      "Recording Task",
-      8192,
-      NULL,
-      RECORDING_TASK_PRIORITY,
-      NULL
-    );
-    
-    return true;
-  }
-  
-  return false;
-}
-
-void stopRecording() {
-  if (isRecording) {
-    isRecording = false;
-    // Der Aufnahme-Task wird sich selbst beenden, wenn isRecording false ist
-    
-    // Warte kurz, um sicherzustellen, dass der Aufnahme-Task abgeschlossen ist
-    delay(100);
-    
-    // LED auf Bereit-Status zurücksetzen
-    setLEDStatus(COLOR_READY);
-  }
-}
-
-void writeWAVHeader() {
-  // WAV-Header erstellen
-  WAVHeader header;
-  
-  // RIFF-Chunk-Größe und Daten-Chunk-Größe werden später aktualisiert
-  
-  // Schreibe Header in die Datei
-  wavFile.write((const uint8_t *)&header, sizeof(WAVHeader));
-}
-
-void updateWAVHeader() {
-  if (!wavFile) {
-    return;
-  }
-  
-  // Datei an den Anfang setzen
-  wavFile.seek(0);
-  
-  // WAV-Header aktualisieren
-  WAVHeader header;
-  
-  // RIFF-Chunk-Größe = Dateigröße - 8 Bytes für RIFF und Größe
-  header.wavSize = dataSize + sizeof(WAVHeader) - 8;
-  
-  // Daten-Chunk-Größe = Größe der Audio-Daten
-  header.dataChunkSize = dataSize;
-  
-  // Header in die Datei schreiben
-  wavFile.write((const uint8_t *)&header, sizeof(WAVHeader));
-}
-
 void handleButton() {
   static uint32_t lastButtonPress = 0;
   static bool lastButtonState = HIGH;  // Pull-up, daher HIGH wenn nicht gedrückt
@@ -403,160 +174,6 @@ void pulseLED(CRGB color) {
     FastLED.show();
     delay(4);
   }
-}
-
-// Task für Audioaufnahme (läuft mit hoher Priorität)
-void recordingTask(void* parameter) {
-  Serial.println("Aufnahme-Task gestartet");
-  
-  // Variablen für Nachhalleffekt
-  uint8_t currentBrightness = 64;
-  uint8_t targetBrightness = 64;
-  float decayFactor = 0.8;  // Nachklangfaktor: Höher = längerer Nachklang
-
-  while (isRecording) {
-    // Audio aufnehmen und auf SD-Karte schreiben
-    int32_t samples[BUFFER_SIZE];
-    size_t bytesRead = 0;
-    
-    // Daten vom Mikrofon lesen
-    esp_err_t result = i2s_read(I2S_PORT, &samples, sizeof(samples), &bytesRead, portMAX_DELAY);
-    
-    if (result == ESP_OK && bytesRead > 0 && isRecording) {
-      // Konvertiere 32-bit INMP441 Daten zu 16-bit PCM für WAV
-      int16_t pcmData[BUFFER_SIZE];
-
-      // Audio-Pegel für LED-Steuerung berechnen
-      int32_t sum = 0;
-      int32_t peak = 0;
-
-      // Konvertierung und Normalisierung der Samples
-      for (int i = 0; i < bytesRead / 4; i++) {
-        // INMP441 liefert Daten im Bereich links ausgerichtet (MSB),
-        // wir müssen sie um 8 Bits nach rechts verschieben und auf 16 Bit reduzieren
-        int32_t sample = samples[i] >> 8;
-        
-        // Audio-Pegel berechnen (absoluter Wert des Samples)
-        int32_t absSample = abs(sample);
-        sum += absSample;
-
-        // Peak aktualisieren
-        if (absSample > peak) {
-          peak = absSample;
-        }
-
-        // Begrenze auf 16-bit Signed Integer Bereich
-        if (sample > 32767) sample = 32767;
-        if (sample < -32768) sample = -32768;
-        
-        pcmData[i] = (int16_t)sample;
-      }
-      
-      // LED-Helligkeit basierend auf Audio-Pegel anpassen
-      int numSamples = bytesRead / 4;
-      if (numSamples > 0) {
-        // Berechne Durchschnitt und skaliere ihn
-        int32_t average = sum / numSamples;
-        
-        // Kombiniere Durchschnitt und Peak für dynamischeres Verhalten
-        // Peak stärker gewichten für bessere visuelle Reaktion
-        int32_t combinedLevel = average * 0.3 + peak * 0.9;
-        
-        // Skaliere auf 64-255 für Helligkeit, mit stärkerer Skalierung
-        targetBrightness = constrain(64 + (combinedLevel / 80), 64, 255);
-        
-        // Nachhall-Effekt: Langsam zum Zielwert bewegen
-        if (targetBrightness > currentBrightness) {
-          // Schnell heller werden (bei lautem Ton)
-          currentBrightness = targetBrightness;
-        } else {
-          // Langsam dunkler werden (Nachhall)
-          currentBrightness = currentBrightness * decayFactor + targetBrightness * (1 - decayFactor);
-        }
-        
-        // LED auf Rot setzen mit berechneter Helligkeit
-        leds[0] = COLOR_RECORDING;
-        
-        // Für deutlichere Reaktion bei hohen Pegeln: Färbung leicht ändern
-        if (currentBrightness > 180) {
-          // Bei hoher Lautstärke etwas mehr ins Orange gehen
-          leds[0].g = map(currentBrightness, 180, 255, 0, 70);
-        }
-        
-        FastLED.setBrightness(currentBrightness);
-        FastLED.show();
-      }
-
-      if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
-        // Schreibe konvertierte Daten auf SD-Karte
-        size_t bytesToWrite = bytesRead / 2; // 16-bit anstatt 32-bit
-        size_t bytesWritten = wavFile.write((uint8_t*)pcmData, bytesToWrite);
-        
-        if (bytesWritten != bytesToWrite) {
-          Serial.println("Fehler beim Schreiben auf die SD-Karte!");
-          isRecording = false;
-          setLEDStatus(COLOR_ERROR);
-        } else {
-          dataSize += bytesWritten;
-        }
-        
-        xSemaphoreGive(sdCardMutex);
-      }
-      
-    }
-    
-    // Kurze Verzögerung, um anderen Tasks CPU-Zeit zu geben
-    vTaskDelay(1);
-  }
-  
-  // Aufnahme abgeschlossen, WAV-Header aktualisieren und Datei schließen
-  unsigned long recordingDuration = millis() - recordingStartTime;
-
-  if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
-    // WAV-Header aktualisieren
-    updateWAVHeader();
-    
-
-
-    // Datei schließen
-    wavFile.close();
-    
-    // Generiere einen eindeutigen Dateinamen basierend auf der aktuellen Zeit
-    
-    sprintf(filename, "/%s_%08lu.wav", config.deviceName, recordingStartTime);
-
-    //SD.rename(tempFilename, filename);
-    //if(SD.rename("/config.txt", "/oldConfig.txt")){
-    //  Serial.printf("Aufnahme gespeichert als: %s\n", filename);
-    //}else{
-    //  Serial.printf("Rename failed !\n");
-    //}
-
-    xSemaphoreGive(sdCardMutex);
-
-    Serial.printf("Aufnahme beendet: %s\n", filename);
-    Serial.printf("Aufnahmedauer: %lu s\n", recordingDuration/1000);
-    Serial.printf("Dateigröße: %lu kB\n", (dataSize + 44)/1000); // 44 Bytes für WAV-Header
-    
-    // Dateinamen zur Upload-Queue hinzufügen
-    char uploadFilename[MAX_FILENAME_LEN];
-    strcpy(uploadFilename, filename);
-    xQueueSend(uploadQueue, uploadFilename, portMAX_DELAY);
-    
-    // Setze LED-Helligkeit zurück
-    FastLED.setBrightness(64);
-    
-    // Zeige Aufnahme-Beendigung mit Blinken an
-    for (int i = 0; i < 3; i++) {
-      setLEDStatus(CRGB::Black);
-      delay(100);
-      setLEDStatus(COLOR_READY);
-      delay(100);
-    }
-  }
-  
-  // Task beenden
-  vTaskDelete(NULL);
 }
 
 // Task für FTP-Upload (läuft mit niedrigerer Priorität)
@@ -629,31 +246,3 @@ void uploadTask(void* parameter) {
     }
   }
 }
-
-// TODO: FTP-Upload-Funktion (für später)
-/*
-void uploadFileToFTP(const char* fileToUpload) {
-  // Hier kommt der Code für den FTP-Upload
-  // Implementiere dies mit einer ESP32-kompatiblen FTP-Client-Bibliothek
-  // wie z.B. ESP32_FTPClient
-  
-  // Beispiel:
-  // ESP32_FTPClient ftp(ftp_server, ftp_user, ftp_password, ftp_port);
-  // ftp.OpenConnection();
-  // ftp.ChangeWorkDir("/upload");
-  // ftp.InitFile("Type I");
-  // ftp.NewFile(basename(fileToUpload));
-  // 
-  // File f = SD.open(fileToUpload, FILE_READ);
-  // if (f) {
-  //   uint8_t buffer[1024];
-  //   while (int bytesRead = f.read(buffer, sizeof(buffer))) {
-  //     ftp.WriteData(buffer, bytesRead);
-  //   }
-  //   f.close();
-  // }
-  // 
-  // ftp.CloseFile();
-  // ftp.CloseConnection();
-}
-*/

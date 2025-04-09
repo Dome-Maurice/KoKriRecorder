@@ -20,9 +20,7 @@
 #define CONFIG_FILENAME "/config.txt"    // Name der Konfigurationsdatei
 #define MAX_VALUE_LEN   64       // Maximale Länge eines Konfigurationswertes
 #define MAX_FILENAME_LEN 32      // Maximale Länge des Dateinamens
-#define TEMP_FILENAME   "/recording.tmp" // Temporäre Aufnahmedatei
-
-const char* tempFilename = "/recording.tmp";
+#define TEMP_FILENAME "/recording.wav" // Temporäre Aufnahmedatei
 
 // Button für Aufnahmesteuerung
 #define RECORD_BUTTON_PIN 9      // Button-Pin für Aufnahmesteuerung
@@ -45,6 +43,10 @@ const char* tempFilename = "/recording.tmp";
 
 // Webserver Konfiguration
 #define WEB_SERVER_PORT 80          // Port für den Webserver
+
+// Queue für FTP-Upload-Tasks
+QueueHandle_t uploadQueue;
+SemaphoreHandle_t sdCardMutex;   // Mutex für SD-Karten-Zugriff
 
 // Struktur für die Konfigurationsdaten
 struct RecorderConfig {

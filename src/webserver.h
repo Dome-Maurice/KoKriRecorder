@@ -7,7 +7,6 @@
 #include <SD.h>
 #include "config.h"
 
-extern SemaphoreHandle_t sdCardMutex;
 extern RecorderConfig config;
 
 // Webserver-Instanz
