@@ -7,40 +7,9 @@
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 
-// Konstanten für I2S
-#define I2S_WS_PIN      12       // Word Select (WS) Pin
-#define I2S_SCK_PIN     13       // Serial Clock (SCK) Pin
-#define I2S_SD_PIN      11       // Serial Data (SD) Pin
-#define I2S_PORT        I2S_NUM_0
-#define SAMPLE_RATE     16000    // Sample Rate in Hz (16kHz)
-#define BUFFER_SIZE     1024     // Größe des Aufnahmepuffers
-#define BIT_DEPTH       32       // INMP441 liefert 24-Bit Daten, I2S empfängt als 32-Bit
-
-// Konstanten für SD-Karte
-#define SD_CS_PIN       4        // SD Card Chip Select Pin
-#define SD_MOSI_PIN     6        // SD Card MOSI
-#define SD_MISO_PIN     7        // SD Card MISO
-#define SD_SCK_PIN      5        // SD Card SCK
-
-// Button für Aufnahmesteuerung
-#define RECORD_BUTTON_PIN 9      // Button-Pin für Aufnahmesteuerung
-#define MAX_FILENAME_LEN 32      // Maximale Länge des Dateinamens
-
-// WS2812 LED-Konfiguration
-#define LED_PIN         48        // Pin für die WS2812-LED
-#define NUM_LEDS        1        // Nur eine LED
-#define LED_TYPE        WS2812   // LED-Typ
-#define COLOR_ORDER     GRB      // Farbreihenfolge (meistens GRB bei WS2812)
-
-// Status-Farben
-#define COLOR_READY     CRGB(0, 64, 0)    // Grün (gedimmt) = Bereit
-#define COLOR_RECORDING CRGB(255, 0, 0)   // Rot = Aufnahme
-#define COLOR_ERROR     CRGB(255, 50, 0)  // Orange = Fehler
-#define COLOR_UPLOAD    CRGB(0, 0, 255)   // Blau = Daten werden hochgeladen
-
-// Task-Prioritäten
-#define RECORDING_TASK_PRIORITY 10  // Hohe Priorität für Aufnahme-Task
-#define UPLOAD_TASK_PRIORITY 5      // Niedrigere Priorität für Upload-Task
+#include "config.h"
+#include "readconfig.h"
+#include "webserver.h"
 
 // Globale Variablen
 bool isRecording = false;        // Aufnahmestatus
@@ -51,138 +20,9 @@ unsigned long fileSize = 0;      // Größe der Datei (für WAV-Header)
 unsigned long dataSize = 0;      // Größe der Audio-Daten
 CRGB leds[NUM_LEDS];             // Array für WS2812-LED
 
-const char* tempFilename = "/recording.tmp";
-
 // Queue für FTP-Upload-Tasks
 QueueHandle_t uploadQueue;
 SemaphoreHandle_t sdCardMutex;   // Mutex für SD-Karten-Zugriff
-
-#include <readconfig.h>
-
-AsyncWebServer server(80);
-
-String urlDecode(const String& input) {
-  String decoded = "";
-  char temp[] = "0x00";
-  unsigned int len = input.length();
-  unsigned int i = 0;
-
-  while (i < len) {
-    char c = input.charAt(i);
-    if (c == '+') {
-      decoded += ' ';
-    } else if (c == '%' && i + 2 < len) {
-      temp[2] = input.charAt(i + 1);
-      temp[3] = input.charAt(i + 2);
-      decoded += (char)strtol(temp, NULL, 16);
-      i += 2;
-    } else {
-      decoded += c;
-    }
-    i++;
-  }
-  return decoded;
-}
-
-
-void setupWebServer() {
-  // Hauptseite: Listet alle Dateien auf
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    String html = "<h2>Aufnahmen:</h2><ul>";
-    
-    if (xSemaphoreTake(sdCardMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
-      File root = SD.open("/");
-      File file = root.openNextFile();
-      
-      while (file) {
-        String fname = String(file.name());
-        html += "<li><a href=\"/" + fname + "\">" + fname + "</a> <a href=\"/delete?file=" + fname + "\">[Delete]</a></li>";
-        file = root.openNextFile();
-      }
-      
-      xSemaphoreGive(sdCardMutex);
-    } else {
-      html = "SD-Karte ist gerade belegt. Bitte später versuchen.";
-    }
-    
-    html += "</ul>";
-    request->send(200, "text/html", html);
-  });
-
-  // Handler für direkten Dateidownload
-  server.onNotFound([](AsyncWebServerRequest *request){
-    String path = request->url();
-    if (!SD.exists(path)) {
-      request->send(404, "text/plain", "Datei nicht gefunden");
-      return;
-    }
-    
-    if (xSemaphoreTake(sdCardMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
-      File file = SD.open(path);
-      request->send(file, path, "application/octet-stream");
-      xSemaphoreGive(sdCardMutex);
-    } else {
-      request->send(503, "text/plain", "SD-Karte momentan nicht verfuegbar");
-    }
-  });
-
-  server.on("/delete", HTTP_GET, [](AsyncWebServerRequest *request){
-    if (!request->hasParam("file")) {
-      request->send(400, "text/plain", "Dateiparameter fehlt.");
-      return;
-    }
-  
-    String fileToDelete = request->getParam("file")->value();
-  
-    // Optional: URL-dekodieren (für Sonderzeichen etc.)
-    fileToDelete = urlDecode(fileToDelete);
-  
-    // Sicherstellen, dass Pfad mit / beginnt
-    if (!fileToDelete.startsWith("/")) {
-      fileToDelete = "/" + fileToDelete;
-    }
-  
-    Serial.printf("Lösche Datei: %s\n", fileToDelete.c_str());
-  
-    if (xSemaphoreTake(sdCardMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
-      if (SD.exists(fileToDelete)) {
-        if (SD.remove(fileToDelete)) {
-          xSemaphoreGive(sdCardMutex);
-          request->send(200, "text/plain", "Datei geloescht.");
-        } else {
-          xSemaphoreGive(sdCardMutex);
-          request->send(500, "text/plain", "Fehler beim Loeschen der Datei.");
-        }
-      } else {
-        xSemaphoreGive(sdCardMutex);
-        request->send(404, "text/plain", "Datei nicht gefunden.");
-      }
-    } else {
-      request->send(503, "text/plain", "SD-Karte momentan nicht verfuegbar.");
-    }
-  });
-  
-  
-
-  server.begin();
-  Serial.println("Webserver gestartet.");
-}
-
-
-
-void connectWiFi() {
-  WiFi.begin(config.wifiSSID, config.wifiPassword);
-  Serial.print("Verbinde mit WLAN");
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  Serial.println("\nWLAN verbunden!");
-  Serial.print("IP-Adresse: ");
-  Serial.println(WiFi.localIP());
-}
 
 // Prototypen
 bool initI2S();
@@ -197,28 +37,6 @@ void setLEDStatus(CRGB color);
 void pulseLED(CRGB color);
 void recordingTask(void* parameter);
 void uploadTask(void* parameter);
-
-// WAV-Header Struktur
-struct WAVHeader {
-  // RIFF Header
-  char riffHeader[4] = {'R', 'I', 'F', 'F'}; // RIFF Header Magic
-  uint32_t wavSize = 0;                       // RIFF Chunk Size
-  char waveHeader[4] = {'W', 'A', 'V', 'E'}; // WAVE Header
-  
-  // Format Header
-  char fmtHeader[4] = {'f', 'm', 't', ' '};  // FMT Header
-  uint32_t fmtChunkSize = 16;                // FMT Chunk Size
-  uint16_t audioFormat = 1;                  // Audio Format (1 = PCM)
-  uint16_t numChannels = 1;                  // Anzahl der Kanäle (1 = Mono)
-  uint32_t sampleRate = SAMPLE_RATE;         // Sample Rate
-  uint32_t byteRate = SAMPLE_RATE * 2;       // Byte Rate (SampleRate * NumChannels * BitsPerSample/8)
-  uint16_t blockAlign = 2;                   // Block Alignment (NumChannels * BitsPerSample/8)
-  uint16_t bitsPerSample = 16;               // Bits pro Sample (16 für PCM)
-  
-  // Data Header
-  char dataHeader[4] = {'d', 'a', 't', 'a'}; // DATA Header
-  uint32_t dataChunkSize = 0;                // Größe des Datenchunks
-};
 
 void setup() {
   Serial.begin(115200);
@@ -267,10 +85,8 @@ void setup() {
   }
 
   if(config.webserverEnabled){
-    connectWiFi();
-    setupWebServer();
+    initWebServer();
   }
-  
 
   // Starte Upload-Task mit niedrigerer Priorität
   xTaskCreate(

@@ -1,22 +1,9 @@
-// Füge diese Strukturen zur Konfiguration am Anfang deines Codes hinzu (nach den anderen #defines)
-#define CONFIG_FILENAME "/config.txt"    // Name der Konfigurationsdatei
-#define MAX_VALUE_LEN 64                // Maximale Länge eines Konfigurationswertes
-
-// Struktur für die Konfigurationsdaten
-struct RecorderConfig {
-    char deviceName[MAX_VALUE_LEN];     // Name des Geräts
-    char wifiSSID[MAX_VALUE_LEN];       // WLAN SSID
-    char wifiPassword[MAX_VALUE_LEN];   // WLAN Passwort
-    char ftpServer[MAX_VALUE_LEN];      // FTP Server
-    char ftpUser[MAX_VALUE_LEN];        // FTP Benutzername
-    char ftpPassword[MAX_VALUE_LEN];    // FTP Passwort
-    uint16_t ftpPort;                   // FTP Port
-    bool ftpEnabled;                    // FTP aktiviert ja/nein
-    bool webserverEnabled;              // Webserver aktiviert ja/nein
-};
+#include "config.h"
 
 // Globale Konfigurationsstruktur
 RecorderConfig config;
+
+extern SemaphoreHandle_t sdCardMutex;
 
 // Funktion zum Lesen der Konfigurationsdatei
 bool loadConfigFromSD() {
