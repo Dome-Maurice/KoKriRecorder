@@ -12,6 +12,7 @@ struct RecorderConfig {
     char ftpPassword[MAX_VALUE_LEN];    // FTP Passwort
     uint16_t ftpPort;                   // FTP Port
     bool ftpEnabled;                    // FTP aktiviert ja/nein
+    bool webserverEnabled;              // Webserver aktiviert ja/nein
 };
 
 // Globale Konfigurationsstruktur
@@ -30,6 +31,7 @@ bool loadConfigFromSD() {
     strcpy(config.ftpPassword, "");
     config.ftpPort = 21;
     config.ftpEnabled = false;
+    config.webserverEnabled = false;
     
     // Prüfen, ob SD-Karte bereit ist
     if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) != pdTRUE) {
@@ -60,6 +62,8 @@ bool loadConfigFromSD() {
             configFile.println("ftpUser=username");
             configFile.println("ftpPassword=password");
             configFile.println("ftpPort=21");
+            configFile.println("# Webserver Konfiguration");
+            configFile.println("webServerEnabled=false");
             configFile.close();
             Serial.println("Beispiel-Konfigurationsdatei erstellt");
         } else {
@@ -136,6 +140,13 @@ bool loadConfigFromSD() {
                             } else {
                                 config.ftpEnabled = false;
                             }
+                        } else if (strcmp(key, "webServerEnabled") == 0) {
+                            // Boolesche Werte verarbeiten
+                            if (strcmp(value, "true") == 0 || strcmp(value, "1") == 0) {
+                                config.webserverEnabled = true;
+                            } else {
+                                config.webserverEnabled = false;
+                            }
                         }
                     }
                 }
@@ -163,6 +174,7 @@ bool loadConfigFromSD() {
     Serial.printf("  FTP Benutzer: %s\n", config.ftpUser);
     Serial.printf("  FTP Passwort: %s\n", config.ftpPassword);
     Serial.printf("  FTP Port: %u\n", config.ftpPort);
+    Serial.printf("  Webserver aktiviert: %s\n", config.webserverEnabled ? "Ja" : "Nein");
     
     return true;
 }

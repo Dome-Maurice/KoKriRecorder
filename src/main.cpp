@@ -4,7 +4,8 @@
 #include <FS.h>
 #include <SPI.h>
 #include <FastLED.h>  // FastLED-Bibliothek für WS2812-LED
-
+#include <WiFi.h>
+#include <ESPAsyncWebServer.h>
 
 // Konstanten für I2S
 #define I2S_WS_PIN      12       // Word Select (WS) Pin
@@ -50,18 +51,138 @@ unsigned long fileSize = 0;      // Größe der Datei (für WAV-Header)
 unsigned long dataSize = 0;      // Größe der Audio-Daten
 CRGB leds[NUM_LEDS];             // Array für WS2812-LED
 
+const char* tempFilename = "/recording.tmp";
+
 // Queue für FTP-Upload-Tasks
 QueueHandle_t uploadQueue;
 SemaphoreHandle_t sdCardMutex;   // Mutex für SD-Karten-Zugriff
 
-// FTP-Upload-Parameter
-// TODO: Hier später die FTP-Parameter hinzufügen
-// const char* ftp_server = "";
-// const char* ftp_user = "";
-// const char* ftp_password = "";
-// uint16_t ftp_port = 21;
-
 #include <readconfig.h>
+
+AsyncWebServer server(80);
+
+String urlDecode(const String& input) {
+  String decoded = "";
+  char temp[] = "0x00";
+  unsigned int len = input.length();
+  unsigned int i = 0;
+
+  while (i < len) {
+    char c = input.charAt(i);
+    if (c == '+') {
+      decoded += ' ';
+    } else if (c == '%' && i + 2 < len) {
+      temp[2] = input.charAt(i + 1);
+      temp[3] = input.charAt(i + 2);
+      decoded += (char)strtol(temp, NULL, 16);
+      i += 2;
+    } else {
+      decoded += c;
+    }
+    i++;
+  }
+  return decoded;
+}
+
+
+void setupWebServer() {
+  // Hauptseite: Listet alle Dateien auf
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    String html = "<h2>Aufnahmen:</h2><ul>";
+    
+    if (xSemaphoreTake(sdCardMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+      File root = SD.open("/");
+      File file = root.openNextFile();
+      
+      while (file) {
+        String fname = String(file.name());
+        html += "<li><a href=\"/" + fname + "\">" + fname + "</a> <a href=\"/delete?file=" + fname + "\">[Delete]</a></li>";
+        file = root.openNextFile();
+      }
+      
+      xSemaphoreGive(sdCardMutex);
+    } else {
+      html = "SD-Karte ist gerade belegt. Bitte später versuchen.";
+    }
+    
+    html += "</ul>";
+    request->send(200, "text/html", html);
+  });
+
+  // Handler für direkten Dateidownload
+  server.onNotFound([](AsyncWebServerRequest *request){
+    String path = request->url();
+    if (!SD.exists(path)) {
+      request->send(404, "text/plain", "Datei nicht gefunden");
+      return;
+    }
+    
+    if (xSemaphoreTake(sdCardMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+      File file = SD.open(path);
+      request->send(file, path, "application/octet-stream");
+      xSemaphoreGive(sdCardMutex);
+    } else {
+      request->send(503, "text/plain", "SD-Karte momentan nicht verfuegbar");
+    }
+  });
+
+  server.on("/delete", HTTP_GET, [](AsyncWebServerRequest *request){
+    if (!request->hasParam("file")) {
+      request->send(400, "text/plain", "Dateiparameter fehlt.");
+      return;
+    }
+  
+    String fileToDelete = request->getParam("file")->value();
+  
+    // Optional: URL-dekodieren (für Sonderzeichen etc.)
+    fileToDelete = urlDecode(fileToDelete);
+  
+    // Sicherstellen, dass Pfad mit / beginnt
+    if (!fileToDelete.startsWith("/")) {
+      fileToDelete = "/" + fileToDelete;
+    }
+  
+    Serial.printf("Lösche Datei: %s\n", fileToDelete.c_str());
+  
+    if (xSemaphoreTake(sdCardMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+      if (SD.exists(fileToDelete)) {
+        if (SD.remove(fileToDelete)) {
+          xSemaphoreGive(sdCardMutex);
+          request->send(200, "text/plain", "Datei geloescht.");
+        } else {
+          xSemaphoreGive(sdCardMutex);
+          request->send(500, "text/plain", "Fehler beim Loeschen der Datei.");
+        }
+      } else {
+        xSemaphoreGive(sdCardMutex);
+        request->send(404, "text/plain", "Datei nicht gefunden.");
+      }
+    } else {
+      request->send(503, "text/plain", "SD-Karte momentan nicht verfuegbar.");
+    }
+  });
+  
+  
+
+  server.begin();
+  Serial.println("Webserver gestartet.");
+}
+
+
+
+void connectWiFi() {
+  WiFi.begin(config.wifiSSID, config.wifiPassword);
+  Serial.print("Verbinde mit WLAN");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\nWLAN verbunden!");
+  Serial.print("IP-Adresse: ");
+  Serial.println(WiFi.localIP());
+}
 
 // Prototypen
 bool initI2S();
@@ -145,6 +266,10 @@ void setup() {
     }
   }
 
+  if(config.webserverEnabled){
+    connectWiFi();
+    setupWebServer();
+  }
   
 
   // Starte Upload-Task mit niedrigerer Priorität
@@ -331,19 +456,16 @@ bool initSDCard() {
 }
 
 bool startRecording() {
-  // Generiere einen eindeutigen Dateinamen basierend auf der aktuellen Zeit
-  unsigned long currentTime = millis();
-  sprintf(filename, "/%s_%08lu.wav", config.deviceName, currentTime);
-  //sprintf(filename, "/REC_%08lu.wav", currentTime);
   
-  Serial.printf("Starte Aufnahme: %s\n", filename);
-  
+  Serial.printf("Starte Aufnahme: %s\n", tempFilename);
+
   if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
     // Öffne die Datei zum Schreiben
-    wavFile = SD.open(filename, FILE_WRITE);
+    wavFile = SD.open(tempFilename, FILE_WRITE);
+
     
     if (!wavFile) {
-      Serial.println("Fehler beim Öffnen der Datei!");
+      Serial.println("Fehler beim Öffnen der temporären Datei!");
       setLEDStatus(COLOR_ERROR);
       xSemaphoreGive(sdCardMutex);
       return false;
@@ -573,15 +695,29 @@ void recordingTask(void* parameter) {
   
   // Aufnahme abgeschlossen, WAV-Header aktualisieren und Datei schließen
   unsigned long recordingDuration = millis() - recordingStartTime;
-  
+
   if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
     // WAV-Header aktualisieren
     updateWAVHeader();
     
+
+
     // Datei schließen
     wavFile.close();
-    xSemaphoreGive(sdCardMutex);
     
+    // Generiere einen eindeutigen Dateinamen basierend auf der aktuellen Zeit
+    
+    sprintf(filename, "/%s_%08lu.wav", config.deviceName, recordingStartTime);
+
+    //SD.rename(tempFilename, filename);
+    //if(SD.rename("/config.txt", "/oldConfig.txt")){
+    //  Serial.printf("Aufnahme gespeichert als: %s\n", filename);
+    //}else{
+    //  Serial.printf("Rename failed !\n");
+    //}
+
+    xSemaphoreGive(sdCardMutex);
+
     Serial.printf("Aufnahme beendet: %s\n", filename);
     Serial.printf("Aufnahmedauer: %lu s\n", recordingDuration/1000);
     Serial.printf("Dateigröße: %lu kB\n", (dataSize + 44)/1000); // 44 Bytes für WAV-Header
