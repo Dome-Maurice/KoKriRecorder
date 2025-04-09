@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <driver/i2s.h>
 #include "config.h"
+#include "recording.h"  // Neue Header-Datei für gemeinsame Funktionen
 
 // I2S-Mikrofon initialisieren
 bool initI2S() {
@@ -93,148 +94,9 @@ bool initI2S() {
   return true;
 }
 
-// Audio-Aufnahme-Task-Funktion
-void recordingTask(void* parameter) {
-  Serial.println("Aufnahme-Task gestartet");
-  
-  // Variablen für Nachhalleffekt
-  uint8_t currentBrightness = 64;
-  uint8_t targetBrightness = 64;
-  float decayFactor = 0.8;  // Nachklangfaktor: Höher = längerer Nachklang
-
-  while (isRecording) {
-    // Audio aufnehmen und auf SD-Karte schreiben
-    int32_t samples[BUFFER_SIZE];
-    size_t bytesRead = 0;
-    
-    // Daten vom Mikrofon lesen
-    esp_err_t result = i2s_read(I2S_PORT, &samples, sizeof(samples), &bytesRead, portMAX_DELAY);
-    
-    if (result == ESP_OK && bytesRead > 0 && isRecording) {
-      // Konvertiere 32-bit INMP441 Daten zu 16-bit PCM für WAV
-      int16_t pcmData[BUFFER_SIZE];
-
-      // Audio-Pegel für LED-Steuerung berechnen
-      int32_t sum = 0;
-      int32_t peak = 0;
-
-      // Konvertierung und Normalisierung der Samples
-      for (int i = 0; i < bytesRead / 4; i++) {
-        // INMP441 liefert Daten im Bereich links ausgerichtet (MSB),
-        // wir müssen sie um 8 Bits nach rechts verschieben und auf 16 Bit reduzieren
-        int32_t sample = samples[i] >> 8;
-        
-        // Audio-Pegel berechnen (absoluter Wert des Samples)
-        int32_t absSample = abs(sample);
-        sum += absSample;
-
-        // Peak aktualisieren
-        if (absSample > peak) {
-          peak = absSample;
-        }
-
-        // Begrenze auf 16-bit Signed Integer Bereich
-        if (sample > 32767) sample = 32767;
-        if (sample < -32768) sample = -32768;
-        
-        pcmData[i] = (int16_t)sample;
-      }
-      
-      // LED-Helligkeit basierend auf Audio-Pegel anpassen
-      int numSamples = bytesRead / 4;
-      if (numSamples > 0) {
-        // Berechne Durchschnitt und skaliere ihn
-        int32_t average = sum / numSamples;
-        
-        // Kombiniere Durchschnitt und Peak für dynamischeres Verhalten
-        // Peak stärker gewichten für bessere visuelle Reaktion
-        int32_t combinedLevel = average * 0.3 + peak * 0.9;
-        
-        // Skaliere auf 64-255 für Helligkeit, mit stärkerer Skalierung
-        targetBrightness = constrain(64 + (combinedLevel / 80), 64, 255);
-        
-        // Nachhall-Effekt: Langsam zum Zielwert bewegen
-        if (targetBrightness > currentBrightness) {
-          // Schnell heller werden (bei lautem Ton)
-          currentBrightness = targetBrightness;
-        } else {
-          // Langsam dunkler werden (Nachhall)
-          currentBrightness = currentBrightness * decayFactor + targetBrightness * (1 - decayFactor);
-        }
-        
-        // LED auf Rot setzen mit berechneter Helligkeit
-        leds[0] = COLOR_RECORDING;
-        
-        // Für deutlichere Reaktion bei hohen Pegeln: Färbung leicht ändern
-        if (currentBrightness > 180) {
-          // Bei hoher Lautstärke etwas mehr ins Orange gehen
-          leds[0].g = map(currentBrightness, 180, 255, 0, 70);
-        }
-        
-        FastLED.setBrightness(currentBrightness);
-        FastLED.show();
-      }
-
-      if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
-        // Schreibe konvertierte Daten auf SD-Karte
-        size_t bytesToWrite = bytesRead / 2; // 16-bit anstatt 32-bit
-        size_t bytesWritten = wavFile.write((uint8_t*)pcmData, bytesToWrite);
-        
-        if (bytesWritten != bytesToWrite) {
-          Serial.println("Fehler beim Schreiben auf die SD-Karte!");
-          isRecording = false;
-          setLEDStatus(COLOR_ERROR);
-        } else {
-          dataSize += bytesWritten;
-        }
-        
-        xSemaphoreGive(sdCardMutex);
-      }
-      
-    }
-    
-    // Kurze Verzögerung, um anderen Tasks CPU-Zeit zu geben
-    vTaskDelay(1);
-  }
-  
-  // Aufnahme abgeschlossen, WAV-Header aktualisieren und Datei schließen
-  unsigned long recordingDuration = millis() - recordingStartTime;
-
-  if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
-    // WAV-Header aktualisieren
-    updateWAVHeader();
-    
-    // Datei schließen
-    wavFile.close();
-    
-    // Generiere einen eindeutigen Dateinamen basierend auf der aktuellen Zeit
-    sprintf(filename, "/%s_%08lu.wav", config.deviceName, recordingStartTime);
-
-    xSemaphoreGive(sdCardMutex);
-
-    Serial.printf("Aufnahme beendet: %s\n", filename);
-    Serial.printf("Aufnahmedauer: %lu s\n", recordingDuration/1000);
-    Serial.printf("Dateigröße: %lu kB\n", (dataSize + 44)/1000); // 44 Bytes für WAV-Header
-    
-    // Dateinamen zur Upload-Queue hinzufügen
-    char uploadFilename[MAX_FILENAME_LEN];
-    strcpy(uploadFilename, filename);
-    xQueueSend(uploadQueue, uploadFilename, portMAX_DELAY);
-    
-    // Setze LED-Helligkeit zurück
-    FastLED.setBrightness(64);
-    
-    // Zeige Aufnahme-Beendigung mit Blinken an
-    for (int i = 0; i < 3; i++) {
-      setLEDStatus(CRGB::Black);
-      delay(100);
-      setLEDStatus(COLOR_READY);
-      delay(100);
-    }
-  }
-  
-  // Task beenden
-  vTaskDelete(NULL);
+// Funktion zum Lesen von Audiodaten vom Mikrofon
+esp_err_t readMicrophoneData(int32_t* samples, size_t* bytesRead) {
+  return i2s_read(I2S_PORT, samples, BUFFER_SIZE * sizeof(int32_t), bytesRead, portMAX_DELAY);
 }
 
 #endif // MIC_H

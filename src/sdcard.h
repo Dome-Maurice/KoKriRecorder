@@ -5,16 +5,7 @@
 #include <SD.h>
 #include <SPI.h>
 #include "config.h"
-
-extern void recordingTask(void* parameter);
-
-extern unsigned long dataSize;
-
-char filename[MAX_FILENAME_LEN]; // Dateiname für die WAV-Datei
-File wavFile;                    // Datei-Handle für WAV-Datei
-unsigned long fileSize = 0;      // Größe der Datei (für WAV-Header)
-unsigned long dataSize = 0;      // Größe der Audio-Daten
-uint32_t recordingStartTime = 0; // Startzeit der Aufnahme
+#include "recording.h"  // Neue Header-Datei für gemeinsame Funktionen
 
 // SD-Karte initialisieren
 bool initSDCard() {
@@ -89,6 +80,52 @@ void updateWAVHeader() {
   
   // Header in die Datei schreiben
   wavFile.write((const uint8_t *)&header, sizeof(WAVHeader));
+}
+
+// Audiodaten auf SD-Karte schreiben
+bool writeAudioDataToSD(int16_t* pcmData, size_t bytesToWrite) {
+  if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
+    size_t bytesWritten = wavFile.write((uint8_t*)pcmData, bytesToWrite);
+    
+    if (bytesWritten != bytesToWrite) {
+      Serial.println("Fehler beim Schreiben auf die SD-Karte!");
+      isRecording = false;
+      setLEDStatus(COLOR_ERROR);
+      xSemaphoreGive(sdCardMutex);
+      return false;
+    } else {
+      dataSize += bytesWritten;
+    }
+    
+    xSemaphoreGive(sdCardMutex);
+    return true;
+  }
+  return false;
+}
+
+// Aufnahmedatei finalisieren
+void finalizeRecordingFile() {
+  if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
+    // WAV-Header aktualisieren
+    updateWAVHeader();
+    
+    // Datei schließen
+    wavFile.close();
+    
+    // Generiere einen eindeutigen Dateinamen basierend auf der aktuellen Zeit
+    sprintf(filename, "/%s_%08lu.wav", config.deviceName, recordingStartTime);
+
+    xSemaphoreGive(sdCardMutex);
+
+    Serial.printf("Aufnahme beendet: %s\n", filename);
+    Serial.printf("Aufnahmedauer: %lu s\n", (millis() - recordingStartTime)/1000);
+    Serial.printf("Dateigröße: %lu kB\n", (dataSize + 44)/1000); // 44 Bytes für WAV-Header
+    
+    // Dateinamen zur Upload-Queue hinzufügen
+    char uploadFilename[MAX_FILENAME_LEN];
+    strcpy(uploadFilename, filename);
+    xQueueSend(uploadQueue, uploadFilename, portMAX_DELAY);
+  }
 }
 
 // Aufnahme starten und Datei öffnen
