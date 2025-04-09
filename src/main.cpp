@@ -10,21 +10,18 @@
 #include "config.h"
 #include "readconfig.h"
 #include "webserver.h"
+#include "led.h"
+#include "ftp.h"
+#include "button.h"
  
 // Globale Variablen
 bool isRecording = false;        // Aufnahmestatus
-
 CRGB leds[NUM_LEDS];             // Array für WS2812-LED
-
-// Prototypen für in main.cpp verbleibende Funktionen
-void handleButton();
-void setLEDStatus(CRGB color);
-void pulseLED(CRGB color);
-void initLED();
-void uploadTask(void* parameter);
 
 #include "sdcard.h" 
 #include "mic.h" 
+
+Button recordButton(RECORD_BUTTON_PIN, 300);
 
 void setup() {
   Serial.begin(115200);
@@ -97,152 +94,21 @@ void setup() {
 }
 
 void loop() {
-  handleButton();
-  
-  // Wenn wir nicht aufnehmen, LED pulsieren lassen
-  if (!isRecording) {
-    static uint32_t lastPulseTime = 0;
-    if (millis() - lastPulseTime > 500) {  // Alle 3 Sekunden pulsieren
-      pulseLED(COLOR_READY);
-      lastPulseTime = millis();
-    }
-  }
-  
-  delay(10); // Leichte Verzögerung zur CPU-Entlastung
-}
-
-void initLED() {
-  //Serial.println("Initialisiere WS2812-LED...");
-  
-  // FastLED-Setup
-  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS)
-    .setCorrection(TypicalLEDStrip)
-    .setDither(false);
-  
-  // Setze anfängliche Helligkeit
-  FastLED.setBrightness(64);  // 0-255
-  
-  // LED ausschalten beim Start
-  fill_solid(leds, NUM_LEDS, CRGB::Black);
-  FastLED.show();
-  
-  //Serial.println("WS2812-LED initialisiert");
-}
-
-void handleButton() {
-  static uint32_t lastButtonPress = 0;
-  static bool lastButtonState = HIGH;  // Pull-up, daher HIGH wenn nicht gedrückt
-  
-  // Debounce
-  if (millis() - lastButtonPress < 300) {
-    return;
-  }
-  
-  bool buttonState = digitalRead(RECORD_BUTTON_PIN);
-  
-  // Erkennung von Flanken (wenn der Button gedrückt wird)
-  if (buttonState == LOW && lastButtonState == HIGH) {
-    lastButtonPress = millis();
     
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
+    if (recordButton.isPressed() && !isRecording) {
+        startRecording();
+    } else if (!recordButton.isPressed() && isRecording) {
+        stopRecording();
     }
-  }
-  
-  lastButtonState = buttonState;
-}
-
-void setLEDStatus(CRGB color) {
-  leds[0] = color;
-  FastLED.show();
-}
-
-void pulseLED(CRGB color) {
-  // Sanftes Pulsieren der LED
-  for (int i = 0; i < 128; i++) {
-    leds[0] = color;
-    leds[0].fadeToBlackBy(128 - i);
-    FastLED.show();
-    delay(4);
-  }
-  
-  for (int i = 128; i >= 0; i--) {
-    leds[0] = color;
-    leds[0].fadeToBlackBy(128 - i);
-    FastLED.show();
-    delay(4);
-  }
-}
-
-// Task für FTP-Upload (läuft mit niedrigerer Priorität)
-void uploadTask(void* parameter) {
-  char uploadFilename[MAX_FILENAME_LEN];
-  
-  while (true) {
-    // Warte auf Dateien in der Upload-Queue
-    if (xQueueReceive(uploadQueue, uploadFilename, portMAX_DELAY) == pdTRUE) {
-      Serial.printf("Queuing für Upload: %s\n", uploadFilename);
-      
-      // Temporär LED-Status auf Upload setzen
-      if (!isRecording) {  // Nur wenn keine Aufnahme läuft
-        setLEDStatus(COLOR_UPLOAD);
-      }
-      
-      // TODO: Hier kommt der FTP-Upload-Code
-      // Wenn der Upload verarbeitet wird, darf er die Aufnahme nicht beeinträchtigen
-      // da er mit niedrigerer Priorität läuft und durch den Mutex geschützt ist
-      
-      // Simuliere Upload (später durch echten FTP-Upload ersetzen)
-      Serial.printf("Simuliere Upload von %s...\n", uploadFilename);
-      
-      // Öffne die Datei zum Lesen in kleinen Chunks, um den Speicher nicht zu überlasten
-      if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
-        File fileToUpload = SD.open(uploadFilename);
-        
-        if (fileToUpload) {
-          uint32_t fileSize = fileToUpload.size();
-          Serial.printf("Datei zum Upload: %s, Größe: %u kB\n", uploadFilename, fileSize/1000);
-          
-          // Gebe den SD-Karten-Zugriff frei, während wir andere Dinge tun
-          xSemaphoreGive(sdCardMutex);
-          
-          // Simuliere Upload-Zeit (etwa 1 Sekunde pro MB)
-          // In der Realität würde hier der eigentliche FTP-Upload stattfinden
-          uint32_t simulatedUploadTime = (fileSize / 1024) + 1000;
-          Serial.printf("Simuliere Upload für %u ms...\n", simulatedUploadTime);
-          
-          // Verteile die Wartezeit in kleinere Stücke, um den Task nicht zu blockieren
-          for (uint32_t i = 0; i < simulatedUploadTime && !isRecording; i += 100) {
-            // Blinke LED während des Uploads, wenn keine Aufnahme läuft
-            if (!isRecording) {
-              // Pulsiere LED blau während des Uploads
-              uint8_t brightness = 50 + 50 * sin(i * 0.01);
-              leds[0] = COLOR_UPLOAD;
-              leds[0].fadeToBlackBy(255 - brightness);
-              FastLED.show();
-            }
-            vTaskDelay(pdMS_TO_TICKS(100));
-          }
-          
-          // Sperren Sie die SD-Karte wieder für den Abschluss
-          if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
-            fileToUpload.close();
-            xSemaphoreGive(sdCardMutex);
-          }
-          
-          Serial.printf("Upload von %s abgeschlossen.\n", uploadFilename);
-        } else {
-          Serial.printf("Fehler beim Öffnen der Datei für Upload: %s\n", uploadFilename);
-          xSemaphoreGive(sdCardMutex);
+    
+    // LED handling only when not recording
+    if (!isRecording) {
+        static uint32_t lastPulseTime = 0;
+        if (millis() - lastPulseTime > 500) {
+            pulseLED(COLOR_READY);
+            lastPulseTime = millis();
         }
-      }
-      
-      // LED-Status zurücksetzen, wenn keine Aufnahme läuft
-      if (!isRecording) {
-        setLEDStatus(COLOR_READY);
-      }
     }
-  }
+    
+    delay(10);
 }
