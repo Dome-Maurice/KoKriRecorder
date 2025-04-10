@@ -111,9 +111,6 @@ void finalizeRecordingFile() {
     
     // Datei schließen
     wavFile.close();
-    
-    // Generiere einen eindeutigen Dateinamen basierend auf der aktuellen Zeit
-    sprintf(filename, "/%s_%08lu.wav", config.deviceName, recordingStartTime);
 
     xSemaphoreGive(sdCardMutex);
 
@@ -130,14 +127,18 @@ void finalizeRecordingFile() {
 
 // Aufnahme starten und Datei öffnen
 bool startRecording() {
-  Serial.printf("Starte Aufnahme: %s\n", TEMP_FILENAME);
+
+  recordingStartTime = millis();
+
+  sprintf(filename, "/%s_%08lu.wav", config.deviceName, recordingStartTime);
+  Serial.printf("Starte Aufnahme: %s\n", filename);
 
   if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
     // Öffne die Datei zum Schreiben
-    wavFile = SD.open(TEMP_FILENAME, FILE_WRITE);
+    wavFile = SD.open(filename, FILE_WRITE);
     
     if (!wavFile) {
-      Serial.println("Fehler beim Öffnen der temporären Datei!");
+      Serial.println("Fehler beim Öffnen der Datei!");
       setLEDStatus(COLOR_ERROR);
       xSemaphoreGive(sdCardMutex);
       return false;
@@ -148,7 +149,6 @@ bool startRecording() {
     xSemaphoreGive(sdCardMutex);
     
     dataSize = 0;
-    recordingStartTime = millis();
     isRecording = true;
     
     // LED auf Aufnahme-Status setzen
@@ -174,6 +174,7 @@ bool startRecording() {
 void stopRecording() {
   if (isRecording) {
     isRecording = false;
+    sprintf(filename, "");
     // Der Aufnahme-Task wird sich selbst beenden, wenn isRecording false ist
     
     // Warte kurz, um sicherzustellen, dass der Aufnahme-Task abgeschlossen ist

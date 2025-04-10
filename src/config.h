@@ -20,7 +20,6 @@
 #define CONFIG_FILENAME "/config.txt"    // Name der Konfigurationsdatei
 #define MAX_VALUE_LEN   64       // Maximale Länge eines Konfigurationswertes
 #define MAX_FILENAME_LEN 32      // Maximale Länge des Dateinamens
-#define TEMP_FILENAME "/recording.wav" // Temporäre Aufnahmedatei
 
 // Button für Aufnahmesteuerung
 #define RECORD_BUTTON_PIN 9      // Button-Pin für Aufnahmesteuerung
