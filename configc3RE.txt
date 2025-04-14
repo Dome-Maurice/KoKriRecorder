@@ -1,0 +1,19 @@
+# Konfigurationsdatei für Audio Recorder
+# Format: schlüssel=wert
+
+# Gerätename
+deviceName=KoKriRecorder
+
+# WLAN Konfiguration
+wifiSSID=SSID
+wifiPassword=Passwort
+
+# FTP Konfiguration
+ftpEnabled=false
+ftpServer=ftp.example.com
+ftpUser=username
+ftpPassword=password
+ftpPort=21
+
+# Webserver Konfiguration
+webServerEnabled=true
