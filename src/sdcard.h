@@ -104,6 +104,12 @@ bool writeAudioDataToSD(int16_t* pcmData, size_t bytesToWrite) {
 
 // Aufnahmedatei finalisieren
 void finalizeRecordingFile() {
+  // Disable I2S interrupt after recording
+  esp_err_t err = disable_i2s_interrupt();
+  if (err != ESP_OK) {
+    Serial.println("Warning: Failed to disable I2S interrupt");
+  }
+
   if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
     // WAV-Header aktualisieren
     updateWAVHeader();
@@ -126,11 +132,21 @@ void finalizeRecordingFile() {
 
 // Aufnahme starten und Datei öffnen
 bool startRecording() {
+  // Enable I2S interrupt before starting recording
+  esp_err_t err = enable_i2s_interrupt();
+  if (err != ESP_OK) {
+    Serial.println("Failed to enable I2S interrupt");
+    return false;
+  }
+
+  xQueueReset(audioQueue); 
+
+  vTaskDelay(pdMS_TO_TICKS(10));
 
   recordingStartTime = millis();
 
   sprintf(filename, "/%s_%08lu.wav", config.deviceName, recordingStartTime/100);
-  Serial.printf("Starte Aufnahme: %s\n", filename);
+  
 
   if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
     // Öffne die Datei zum Schreiben
@@ -138,7 +154,7 @@ bool startRecording() {
     
     if (!wavFile) {
       Serial.println("Fehler beim Öffnen der Datei!");
-      KoKriRec_State == State_RECORDING_ERROR;
+      KoKriRec_State = State_RECORDING_ERROR;
       xSemaphoreGive(sdCardMutex);
       return false;
     }
@@ -159,7 +175,8 @@ bool startRecording() {
       RECORDING_TASK_PRIORITY,
       NULL
     );
-    
+
+    Serial.printf("Starte Aufnahme: %s\n", filename);
     return true;
   }
   

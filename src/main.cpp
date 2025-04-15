@@ -8,19 +8,22 @@
 #include <ESPAsyncWebServer.h>
 
 #include "config.h"
+#include "led.h"
+#include "mic.h"
 #include "readconfig.h"
 #include "webserver.h"
-#include "led.h"
 #include "ftp.h"
 #include "button.h"
 #include "sdcard.h" 
-#include "mic.h" 
+ 
 
 CRGB leds[NUM_LEDS];             // Array für WS2812-LED
 
 DeviceState KoKriRec_State = State_INITIALIZING;
 
 Button recordButton(RECORD_BUTTON_PIN, BUTTON_DEBOUNCE_TIME);
+
+
 
 void setup() {
   Serial.begin(115200);
@@ -40,6 +43,12 @@ void setup() {
   // Erstelle Queue für Upload-Tasks
   uploadQueue = xQueueCreate(20, MAX_FILENAME_LEN * sizeof(char));
   
+  // Erstelle Queue für Audio-Daten
+  audioQueue = xQueueCreate(AUDIO_QUEUE_LENGTH, sizeof(struct AudioData));
+  if (audioQueue == NULL) {
+      Serial.println("Error creating audio queue");
+  }
+  
   // I2S und SD-Karte initialisieren
   bool sdOk = initSDCard();
   bool micOk = initI2S();
@@ -49,13 +58,13 @@ void setup() {
     initWebServer();
   }
 
-  if (!micOk || !sdOk || !configReadOk) {
+  if (!micOk || !sdOk || !configReadOk || audioQueue == NULL) {
     // Mindestens eine Komponente hat Fehler
     Serial.println("Initialisierung fehlgeschlagen.");
     
     // Zeige Fehler mit speziellem Blinkmuster
     while (true) {
-      if (!micOk){
+      if (!micOk || audioQueue == NULL){
         setLEDStatus(CRGB(255, 0, 0));  // Rot für Mikrofon-Fehler
         delay(500);
       }else if (!sdOk){

@@ -11,6 +11,7 @@
 #define SAMPLE_RATE     16000    // Sample Rate in Hz (16kHz)
 #define BUFFER_SIZE     1024     // Größe des Aufnahmepuffers
 #define BIT_DEPTH       32       // INMP441 liefert 24-Bit Daten, I2S empfängt als 32-Bit
+#define AUDIO_QUEUE_LENGTH 16
 
 // SD-Karten Konfiguration
 #define SD_CS_PIN       4        // SD Card Chip Select Pin
@@ -38,6 +39,7 @@
 #define COLOR_UPLOAD    CRGB(0, 0, 255)   // Blau = Daten werden hochgeladen
 
 // Task-Prioritäten
+#define MIC_TASK_PRIORITY 4  // Hohe Priorität für Aufnahme-Task
 #define RECORDING_TASK_PRIORITY 3  // Hohe Priorität für Aufnahme-Task
 #define UPLOAD_TASK_PRIORITY 2     // Niedrigere Priorität für Upload-Task
 

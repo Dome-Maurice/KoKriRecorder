@@ -9,6 +9,7 @@ extern DeviceState KoKriRec_State; // Status des Geräts
 extern unsigned long fileSize;          // Größe der Datei (für WAV-Header)
 extern SemaphoreHandle_t sdCardMutex;
 extern QueueHandle_t uploadQueue;
+extern QueueHandle_t audioQueue;
 
 // Prototypen von Funktionen, die in anderen Dateien implementiert sind
 extern void setLEDStatus(CRGB color);
@@ -17,6 +18,7 @@ extern esp_err_t readMicrophoneData(int32_t* samples, size_t* bytesRead);
 extern bool writeAudioDataToSD(int16_t* pcmData, size_t bytesToWrite);
 extern void finalizeRecordingFile();
 extern void updateLEDFromAudio(int32_t sum, int32_t peak, int numSamples);
+extern void printI2SDebugInfo();
 
 char filename[MAX_FILENAME_LEN]; // Dateiname für die WAV-Datei
 File wavFile;                    // Datei-Handle für WAV-Datei
@@ -25,49 +27,56 @@ uint32_t recordingStartTime;     // Startzeit der Aufnahme
 
 // Audio-Aufnahme-Task-Funktion
 void recordingTask(void* parameter) {
-  Serial.println("Aufnahme-Task gestartet");
+    struct AudioData audioData;
+    uint32_t samplesReceived = 0;
+    uint32_t lastDebugPrint = 0;
 
-  while (KoKriRec_State == State_RECORDING) {
-    int32_t samples[BUFFER_SIZE];
-    size_t bytesRead = 0;
-    
-    esp_err_t result = readMicrophoneData(samples, &bytesRead);
-    
+    Serial.println("Aufnahme-Task gestartet");
 
-    if (result == ESP_OK && bytesRead > 0 && KoKriRec_State == State_RECORDING) {
-      int16_t pcmData[BUFFER_SIZE];
-      int32_t sum = 0;
-      int32_t peak = 0;
+    while (KoKriRec_State == State_RECORDING) {
+        if (xQueueReceive(audioQueue, &audioData, pdMS_TO_TICKS(100)) == pdTRUE) {
+            samplesReceived++;
+            
+            // Debug alle 1000ms
+            if (millis() - lastDebugPrint > 1000) {
+                Serial.printf("Samples empfangen: %d, Bytes: %d\n", 
+                            samplesReceived, audioData.bytesRead);
+                lastDebugPrint = millis();
+            }
 
-      for (int i = 0; i < bytesRead / 4; i++) {
-        int32_t sample = samples[i] >> 8;
-        int32_t absSample = abs(sample);
-        sum += absSample;
+            int16_t pcmData[BUFFER_SIZE];
+            int32_t sum = 0;
+            int32_t peak = 0;
 
-        if (absSample > peak) {
-          peak = absSample;
+            for (int i = 0; i < audioData.bytesRead / 4; i++) {
+                int32_t sample = audioData.samples[i] >> 8;
+                int32_t absSample = abs(sample);
+                sum += absSample;
+
+                if (absSample > peak) {
+                    peak = absSample;
+                }
+
+                if (sample > 32767) sample = 32767;
+                if (sample < -32768) sample = -32768;
+                
+                pcmData[i] = (int16_t)sample;
+            }
+            
+            // Update LED visualization
+            updateLEDFromAudio(sum, peak, audioData.bytesRead / 4);
+
+            // Write audio data
+            size_t bytesToWrite = audioData.bytesRead / 2;
+            writeAudioDataToSD(pcmData, bytesToWrite);
         }
-
-        if (sample > 32767) sample = 32767;
-        if (sample < -32768) sample = -32768;
         
-        pcmData[i] = (int16_t)sample;
-      }
-      
-      // Update LED visualization
-      updateLEDFromAudio(sum, peak, bytesRead / 4);
+        // Debug-Info ausgeben
+        printI2SDebugInfo();
+    } 
 
-      // Write audio data
-      size_t bytesToWrite = bytesRead / 2;
-      writeAudioDataToSD(pcmData, bytesToWrite);
-    }
-    
-    vTaskDelay(1);
-  }
-  
-  finalizeRecordingFile();
-  
-  vTaskDelete(NULL);
+    finalizeRecordingFile(); 
+    vTaskDelete(NULL);
 }
 
 #endif // RECORDING_H
