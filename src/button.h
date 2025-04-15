@@ -21,10 +21,15 @@ public:
           lastButtonState(HIGH),
           buttonState(HIGH) {
         pinMode(pin, INPUT_PULLUP);
+
     }
 
     bool isPressed() {
         bool reading = digitalRead(pin);
+
+        if (reading == LOW && lastButtonState == HIGH) {
+            buttonState = LOW;
+        }
 
         if (reading != lastButtonState) {
             lastDebounceTime = millis();

@@ -5,7 +5,7 @@
 #include "config.h"
 
 // Externe Variablen und Funktionen deklarieren
-extern bool isRecording;
+extern DeviceState KoKriRec_State; // Status des Geräts
 extern unsigned long fileSize;          // Größe der Datei (für WAV-Header)
 extern SemaphoreHandle_t sdCardMutex;
 extern QueueHandle_t uploadQueue;
@@ -27,13 +27,14 @@ uint32_t recordingStartTime;     // Startzeit der Aufnahme
 void recordingTask(void* parameter) {
   Serial.println("Aufnahme-Task gestartet");
 
-  while (isRecording) {
+  while (KoKriRec_State == State_RECORDING) {
     int32_t samples[BUFFER_SIZE];
     size_t bytesRead = 0;
     
     esp_err_t result = readMicrophoneData(samples, &bytesRead);
     
-    if (result == ESP_OK && bytesRead > 0 && isRecording) {
+
+    if (result == ESP_OK && bytesRead > 0 && KoKriRec_State == State_RECORDING) {
       int16_t pcmData[BUFFER_SIZE];
       int32_t sum = 0;
       int32_t peak = 0;
@@ -65,14 +66,6 @@ void recordingTask(void* parameter) {
   }
   
   finalizeRecordingFile();
-  
-  FastLED.setBrightness(64);
-  for (int i = 0; i < 3; i++) {
-    setLEDStatus(CRGB::Black);
-    delay(100);
-    setLEDStatus(COLOR_READY);
-    delay(100);
-  }
   
   vTaskDelete(NULL);
 }

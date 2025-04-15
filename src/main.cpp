@@ -16,16 +16,15 @@
 #include "sdcard.h" 
 #include "mic.h" 
 
-// Globale Variablen
-bool isRecording = false;        // Aufnahmestatus
 CRGB leds[NUM_LEDS];             // Array für WS2812-LED
 
+DeviceState KoKriRec_State = State_INITIALIZING;
 
 Button recordButton(RECORD_BUTTON_PIN, BUTTON_DEBOUNCE_TIME);
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
+  delay(500);
   Serial.println("ESP32-S3 Audio Recorder (16kHz) mit WS2812-LED");
   
   // WS2812-LED initialisieren
@@ -42,35 +41,31 @@ void setup() {
   uploadQueue = xQueueCreate(20, MAX_FILENAME_LEN * sizeof(char));
   
   // I2S und SD-Karte initialisieren
-  bool micOk = initI2S();
   bool sdOk = initSDCard();
-  delay(50);
+  bool micOk = initI2S();
   bool configReadOk = loadConfigFromSD();
-
-  if (!micOk || !sdOk || !configReadOk) {
-    // Mindestens eine Komponente hat Fehler
-    Serial.println("Initialisierung fehlgeschlagen. System nicht bereit.");
-    
-    // Zeige Fehler mit speziellem Blinkmuster
-    while (true) {
-      // Blinke rot-orange, wenn nur das Mikrofon fehlerhaft ist
-      // Blinke blau-orange, wenn nur die SD-Karte fehlerhaft ist
-      // Blinke rot-blau, wenn beide fehlerhaft sind
-      if (!micOk){
-        setLEDStatus(CRGB(255, 0, 0));  // Rot für Mikrofon-Fehler
-      }else if (!sdOk){
-        setLEDStatus(CRGB(0, 0, 255));  // Blau für SD-Fehler
-      }else if(!configReadOk){
-        setLEDStatus(CRGB(0, 255, 255)); // Türkis für Config Lese fehler
-      }
-      delay(500);
-      setLEDStatus(COLOR_ERROR);  // Orange als zweite Farbe
-      delay(500);
-    }
-  }
 
   if(config.webserverEnabled){
     initWebServer();
+  }
+
+  if (!micOk || !sdOk || !configReadOk) {
+    // Mindestens eine Komponente hat Fehler
+    Serial.println("Initialisierung fehlgeschlagen.");
+    
+    // Zeige Fehler mit speziellem Blinkmuster
+    while (true) {
+      if (!micOk){
+        setLEDStatus(CRGB(255, 0, 0));  // Rot für Mikrofon-Fehler
+        delay(500);
+      }else if (!sdOk){
+        setLEDStatus(CRGB(0, 0, 255));  // Blau für SD-Fehler
+        delay(500);
+      }else if(!configReadOk){
+        setLEDStatus(CRGB(0, 255, 255)); // Türkis für Config Lese fehler
+        delay(500);
+      }     
+    }
   }
 
   if(config.ftpEnabled){
@@ -85,33 +80,66 @@ void setup() {
     );
   }
   
-  // Bereit-Signal - Pulsiere die LED grün
-  for (int i = 0; i < 3; i++) {
-    pulseLED(COLOR_READY);
-  }
-  
   // Set LED to ready status
   setLEDStatus(COLOR_READY);
 
+  KoKriRec_State = State_IDLE;
   Serial.println("Recorder bereit. Drücke den Button, um die Aufnahme zu starten/stoppen.");
 }
 
 void loop() {
     
-    if (recordButton.isPressed() && !isRecording) {
+    if (recordButton.isPressed() && KoKriRec_State == State_IDLE) {
+        KoKriRec_State = State_RECORDING;
         startRecording();
-    } else if (!recordButton.isPressed() && isRecording) {
-        stopRecording();
     }
     
-    // LED handling only when not recording
-    if (!isRecording) {
-        static uint32_t lastPulseTime = 0;
-        if (millis() - lastPulseTime > 500) {
-            pulseLED(COLOR_READY);
-            lastPulseTime = millis();
-        }
-    }
+    switch (KoKriRec_State){
+    case State_IDLE:
     
-    vTaskDelay(10);
+      idle_Animation(COLOR_READY, 1000);
+
+      break;
+
+    case State_RECORDING:
+
+      if (!recordButton.isPressed()) {
+        vTaskDelay(pdMS_TO_TICKS(50)); // Warte auf Abschluss der Aufnahme
+        KoKriRec_State = State_IDLE; // Aufnahme Task wird sich selbst beenden
+      }
+
+      break;
+
+    case State_KOKRI_SCHALE_UPLOADING:
+
+      idle_Animation(COLOR_UPLOAD, 500);
+
+      break;
+
+    case State_KOKRI_SCHALE_IDLE:
+
+      idle_Animation(COLOR_READY, 500);
+
+      break;
+
+    case State_RECORDING_ERROR:
+      idle_Animation(COLOR_ERROR, 100);
+      break;
+
+    case State_SD_ERROR:
+      idle_Animation(COLOR_ERROR, 100);
+      break;
+
+    case State_FTP_ERROR:
+      idle_Animation(COLOR_ERROR, 100);
+      break;
+
+    default:
+    case State_ERROR:
+      idle_Animation(COLOR_ERROR, 100);
+      break;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(10));
+
 }

@@ -38,8 +38,8 @@
 #define COLOR_UPLOAD    CRGB(0, 0, 255)   // Blau = Daten werden hochgeladen
 
 // Task-Prioritäten
-#define RECORDING_TASK_PRIORITY 10  // Hohe Priorität für Aufnahme-Task
-#define UPLOAD_TASK_PRIORITY 5      // Niedrigere Priorität für Upload-Task
+#define RECORDING_TASK_PRIORITY 3  // Hohe Priorität für Aufnahme-Task
+#define UPLOAD_TASK_PRIORITY 2     // Niedrigere Priorität für Upload-Task
 
 // Webserver Konfiguration
 #define WEB_SERVER_PORT 80          // Port für den Webserver
@@ -85,6 +85,18 @@ struct WAVHeader {
     // Data Header
     char dataHeader[4] = {'d', 'a', 't', 'a'}; // DATA Header
     uint32_t dataChunkSize = 0;                // Größe des Datenchunks
+};
+
+enum DeviceState {
+    State_INITIALIZING,
+    State_IDLE,
+    State_RECORDING,
+    State_KOKRI_SCHALE_UPLOADING,
+    State_KOKRI_SCHALE_IDLE,
+    State_RECORDING_ERROR,
+    State_SD_ERROR,
+    State_FTP_ERROR,
+    State_ERROR
 };
 
 #endif // CONFIG_H

@@ -6,10 +6,8 @@
 #include "config.h"
 #include "led.h"
 
-extern bool isRecording;
 extern SemaphoreHandle_t sdCardMutex;
 extern QueueHandle_t uploadQueue;
-
 
 
 void FTPuploadTask(void* parameter) {
@@ -20,22 +18,18 @@ void FTPuploadTask(void* parameter) {
     
     while (WiFi.status() == WL_CONNECTED) {
         if (xQueuePeek(uploadQueue, uploadFilename, portMAX_DELAY) == pdTRUE) {
-            Serial.printf("Queuing für Upload: %s\n", uploadFilename);
+            Serial.printf("Uploading: %s\n", uploadFilename);
             snprintf(tempFilename, sizeof(tempFilename), "/%s.temp", uploadFilename);
             bool uploadSuccess = false;
 
             if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
                 File fileToUpload = SD.open(uploadFilename);
-                
-                if (!isRecording) {
-                    setLEDStatus(COLOR_UPLOAD);
-                }
 
                 if (fileToUpload) {
                     uint32_t fileSize = fileToUpload.size();
-                    Serial.printf("Datei zum Upload: %s, Größe: %u kB\n", uploadFilename, fileSize/1000);  
-
                     xSemaphoreGive(sdCardMutex);
+
+                    Serial.printf("Datei zum Upload: %s, Größe: %u kB\n", uploadFilename, fileSize/1000);                  
 
                     if(!ftpclient.isConnected()) {
                         ftpclient.OpenConnection();
@@ -55,7 +49,7 @@ void FTPuploadTask(void* parameter) {
                             bytesUploaded += bytesRead;           
                         }
 
-                        if(ftpclient.isConnected() == false){
+                        if(!ftpclient.isConnected()){
                             Serial.println("FTP Verbindung verloren. Upload abgebrochen.");
                             break;
                         }
@@ -73,14 +67,14 @@ void FTPuploadTask(void* parameter) {
                         xQueueReceive(uploadQueue, uploadFilename, 0);
                     }
 
-                } else {
+                }else{
                     xSemaphoreGive(sdCardMutex);
                     Serial.printf("Fehler beim Öffnen der Datei für Upload: %s\n", uploadFilename);                    
                 }
             }
             
             if(!uploadSuccess) {
-                vTaskDelay(pdMS_TO_TICKS(5000));
+                vTaskDelay(pdMS_TO_TICKS(FTP_TIMEOUT));
                 Serial.printf("Upload fehlgeschlagen. Datei %s wird erneut in die Warteschlange gestellt.\n", uploadFilename);
             }
 
@@ -89,8 +83,13 @@ void FTPuploadTask(void* parameter) {
                 Serial.println("Keine weiteren Uploads in der Warteschlange.");
             }
         }
+
+        vTaskDelay(pdMS_TO_TICKS(10));
+
     }
-    vTaskDelete(NULL);
+    
+    Serial.println("FTP Upload Task beendet.");
+    vTaskDelete(NULL); 
 }
 
 

@@ -28,19 +28,21 @@ void setLEDStatus(CRGB color) {
   FastLED.show();
 }
 
-void pulseLED(CRGB color) {
-  for (int i = 0; i < 128; i++) {
-    leds[0] = color;
-    leds[0].fadeToBlackBy(128 - i);
-    FastLED.show();
-    delay(4);
-  }
-  
-  for (int i = 128; i >= 0; i--) {
-    leds[0] = color;
-    leds[0].fadeToBlackBy(128 - i);
-    FastLED.show();
-    delay(4);
+void idle_Animation(CRGB color, int speed) {
+  if (millis() %  speed) {
+    for (int i = 0; i < 128; i++) {
+      leds[0] = color;
+      leds[0].fadeToBlackBy(128 - i);
+      FastLED.show();
+      vTaskDelay(pdMS_TO_TICKS( (int)((float)speed/2)/128) );
+    }
+    
+    for (int i = 128; i >= 0; i--) {
+      leds[0] = color;
+      leds[0].fadeToBlackBy(128 - i);
+      FastLED.show();
+      vTaskDelay(pdMS_TO_TICKS( (int)((float)speed/2)/128) );
+    }
   }
 }
 
