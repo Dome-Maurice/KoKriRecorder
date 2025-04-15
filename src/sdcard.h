@@ -119,9 +119,9 @@ void finalizeRecordingFile() {
     Serial.printf("Dateigröße: %lu kB\n", (dataSize + 44)/1000); // 44 Bytes für WAV-Header
     
     // Dateinamen zur Upload-Queue hinzufügen
-    char uploadFilename[MAX_FILENAME_LEN];
-    strcpy(uploadFilename, filename);
-    xQueueSend(uploadQueue, uploadFilename, portMAX_DELAY);
+    //char uploadFilename[MAX_FILENAME_LEN];
+    //strcpy(uploadFilename, filename);
+    xQueueSend(uploadQueue, filename, portMAX_DELAY);
   }
 }
 
@@ -174,7 +174,6 @@ bool startRecording() {
 void stopRecording() {
   if (isRecording) {
     isRecording = false;
-    sprintf(filename, "");
     // Der Aufnahme-Task wird sich selbst beenden, wenn isRecording false ist
     
     // Warte kurz, um sicherzustellen, dass der Aufnahme-Task abgeschlossen ist

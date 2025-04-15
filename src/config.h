@@ -23,6 +23,7 @@
 
 // Button für Aufnahmesteuerung
 #define RECORD_BUTTON_PIN 9      // Button-Pin für Aufnahmesteuerung
+#define BUTTON_DEBOUNCE_TIME 10 // Entprellzeit in ms
 
 // WS2812 LED-Konfiguration
 #define LED_PIN         48       // Pin für die WS2812-LED
@@ -42,6 +43,10 @@
 
 // Webserver Konfiguration
 #define WEB_SERVER_PORT 80          // Port für den Webserver
+
+// FTP Konfiguration
+#define FTP_TIMEOUT 5000              // Timeout für FTP-Operationen in ms
+#define FTP_BUFFER_SIZE 2000          // Puffergröße für FTP-Übertragungen
 
 // Queue für FTP-Upload-Tasks
 QueueHandle_t uploadQueue;

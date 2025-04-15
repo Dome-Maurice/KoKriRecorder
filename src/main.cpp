@@ -21,7 +21,7 @@ bool isRecording = false;        // Aufnahmestatus
 CRGB leds[NUM_LEDS];             // Array für WS2812-LED
 
 
-Button recordButton(RECORD_BUTTON_PIN, 300);
+Button recordButton(RECORD_BUTTON_PIN, BUTTON_DEBOUNCE_TIME);
 
 void setup() {
   Serial.begin(115200);
@@ -39,7 +39,7 @@ void setup() {
   sdCardMutex = xSemaphoreCreateMutex();
   
   // Erstelle Queue für Upload-Tasks
-  uploadQueue = xQueueCreate(10, MAX_FILENAME_LEN * sizeof(char));
+  uploadQueue = xQueueCreate(20, MAX_FILENAME_LEN * sizeof(char));
   
   // I2S und SD-Karte initialisieren
   bool micOk = initI2S();
@@ -73,15 +73,17 @@ void setup() {
     initWebServer();
   }
 
-  // Starte Upload-Task mit niedrigerer Priorität
-  xTaskCreate(
-    uploadTask,
-    "Upload Task",
-    8192,
-    NULL,
-    UPLOAD_TASK_PRIORITY,
-    NULL
-  );
+  if(config.ftpEnabled){
+    // Starte Upload-Task mit niedrigerer Priorität
+    xTaskCreate(
+      FTPuploadTask,
+      "FTP Upload Task",
+      8192,
+      NULL,
+      UPLOAD_TASK_PRIORITY,
+      NULL
+    );
+  }
   
   // Bereit-Signal - Pulsiere die LED grün
   for (int i = 0; i < 3; i++) {
@@ -90,6 +92,7 @@ void setup() {
   
   // Set LED to ready status
   setLEDStatus(COLOR_READY);
+
   Serial.println("Recorder bereit. Drücke den Button, um die Aufnahme zu starten/stoppen.");
 }
 
@@ -110,5 +113,5 @@ void loop() {
         }
     }
     
-    delay(10);
+    vTaskDelay(10);
 }

@@ -14,7 +14,7 @@ private:
     bool buttonState;
 
 public:
-    Button(uint8_t pin, uint32_t debounceDelay = 50) 
+    Button(uint8_t pin, uint32_t debounceDelay = BUTTON_DEBOUNCE_TIME) 
         : pin(pin), 
           debounceDelay(debounceDelay),
           lastDebounceTime(0),
@@ -25,21 +25,17 @@ public:
 
     bool isPressed() {
         bool reading = digitalRead(pin);
-        bool pressed = false;
 
         if (reading != lastButtonState) {
             lastDebounceTime = millis();
         }
 
-        if ((millis() - lastDebounceTime) > debounceDelay) {
-            if (reading != buttonState) {
-                buttonState = reading;
-            }
-            pressed = (buttonState == LOW); // LOW means pressed (INPUT_PULLUP)
+        if ((millis() - lastDebounceTime) > debounceDelay && reading != buttonState) {
+            buttonState = reading;
         }
 
         lastButtonState = reading;
-        return pressed;
+        return (buttonState == LOW); // LOW means pressed (INPUT_PULLUP)
     }
 };
 
