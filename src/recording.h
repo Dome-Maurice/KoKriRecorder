@@ -4,12 +4,21 @@
 #include <Arduino.h>
 #include "config.h"
 
+// Am Anfang der Datei nach den includes
+#define AUDIO_QUEUE_LENGTH 8
+static QueueHandle_t audioQueue = NULL;
+
+// Struktur für Audio-Daten
+struct AudioData {
+    int32_t samples[BUFFER_SIZE];
+    size_t bytesRead;
+};
+
 // Externe Variablen und Funktionen deklarieren
 extern DeviceState KoKriRec_State; // Status des Geräts
 extern unsigned long fileSize;          // Größe der Datei (für WAV-Header)
 extern SemaphoreHandle_t sdCardMutex;
 extern QueueHandle_t uploadQueue;
-extern QueueHandle_t audioQueue;
 
 // Prototypen von Funktionen, die in anderen Dateien implementiert sind
 extern void setLEDStatus(CRGB color);
@@ -18,7 +27,6 @@ extern esp_err_t readMicrophoneData(int32_t* samples, size_t* bytesRead);
 extern bool writeAudioDataToSD(int16_t* pcmData, size_t bytesToWrite);
 extern void finalizeRecordingFile();
 extern void updateLEDFromAudio(int32_t sum, int32_t peak, int numSamples);
-extern void printI2SDebugInfo();
 
 char filename[MAX_FILENAME_LEN]; // Dateiname für die WAV-Datei
 File wavFile;                    // Datei-Handle für WAV-Datei
@@ -27,56 +35,60 @@ uint32_t recordingStartTime;     // Startzeit der Aufnahme
 
 // Audio-Aufnahme-Task-Funktion
 void recordingTask(void* parameter) {
-    struct AudioData audioData;
-    uint32_t samplesReceived = 0;
-    uint32_t lastDebugPrint = 0;
 
-    Serial.println("Aufnahme-Task gestartet");
+  struct AudioData audioData;
+  Serial.println("Aufnahme-Task gestartet");
 
-    while (KoKriRec_State == State_RECORDING) {
-        if (xQueueReceive(audioQueue, &audioData, pdMS_TO_TICKS(100)) == pdTRUE) {
-            samplesReceived++;
-            
-            // Debug alle 1000ms
-            if (millis() - lastDebugPrint > 1000) {
-                Serial.printf("Samples empfangen: %d, Bytes: %d\n", 
-                            samplesReceived, audioData.bytesRead);
-                lastDebugPrint = millis();
-            }
+  while (KoKriRec_State == State_RECORDING) {
 
-            int16_t pcmData[BUFFER_SIZE];
-            int32_t sum = 0;
-            int32_t peak = 0;
+    if (xQueueReceive(audioQueue, &audioData, pdMS_TO_TICKS(1)) == pdTRUE) {
+      int16_t pcmData[BUFFER_SIZE];
+      int32_t sum = 0;
+      int32_t peak = 0;
 
-            for (int i = 0; i < audioData.bytesRead / 4; i++) {
-                int32_t sample = audioData.samples[i] >> 8;
-                int32_t absSample = abs(sample);
-                sum += absSample;
+      for (int i = 0; i < audioData.bytesRead / 4; i++) {
+        int32_t sample = audioData.samples[i] >> 8;
+        int32_t absSample = abs(sample);
+        sum += absSample;
 
-                if (absSample > peak) {
-                    peak = absSample;
-                }
-
-                if (sample > 32767) sample = 32767;
-                if (sample < -32768) sample = -32768;
-                
-                pcmData[i] = (int16_t)sample;
-            }
-            
-            // Update LED visualization
-            updateLEDFromAudio(sum, peak, audioData.bytesRead / 4);
-
-            // Write audio data
-            size_t bytesToWrite = audioData.bytesRead / 2;
-            writeAudioDataToSD(pcmData, bytesToWrite);
+        if (absSample > peak) {
+          peak = absSample;
         }
-        
-        // Debug-Info ausgeben
-        printI2SDebugInfo();
-    } 
 
-    finalizeRecordingFile(); 
-    vTaskDelete(NULL);
+        if (sample > 32767) sample = 32767;
+        if (sample < -32768) sample = -32768;
+        
+        pcmData[i] = (int16_t)sample;
+      }
+      
+      // Update LED visualization
+      updateLEDFromAudio(sum, peak, audioData.bytesRead / 4);
+
+      // Write audio data
+      size_t bytesToWrite = audioData.bytesRead / 2;
+      writeAudioDataToSD(pcmData, bytesToWrite);
+    }
+  } 
+
+  finalizeRecordingFile(); 
+  vTaskDelete(NULL);
+}
+
+void microphoneTask(void* parameter) {
+  struct AudioData audioData;
+  
+  while (KoKriRec_State == State_RECORDING) {
+
+      esp_err_t result = readMicrophoneData(audioData.samples, &audioData.bytesRead);
+      
+      if (result == ESP_OK && audioData.bytesRead > 0) {
+        if (xQueueSend(audioQueue, &audioData, 0) != pdTRUE) {
+          Serial.println("Queue voll!");
+        }
+      }
+      vTaskDelay(pdMS_TO_TICKS(20)); // Kurze Pause, um CPU-Last zu reduzieren
+  }
+  vTaskDelete(NULL);
 }
 
 #endif // RECORDING_H

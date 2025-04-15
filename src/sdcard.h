@@ -15,7 +15,7 @@ bool initSDCard() {
     
     if (!SD.begin(SD_CS_PIN)) {
       Serial.println("SD-Karten-Initialisierung fehlgeschlagen!");
-      KoKriRec_State == State_RECORDING_ERROR;
+      setLEDStatus(COLOR_ERROR);
       xSemaphoreGive(sdCardMutex);
       return false;
     }
@@ -23,7 +23,7 @@ bool initSDCard() {
     uint8_t cardType = SD.cardType();
     if (cardType == CARD_NONE) {
       Serial.println("Keine SD-Karte gefunden!");
-      KoKriRec_State == State_RECORDING_ERROR;
+      setLEDStatus(COLOR_ERROR);
       xSemaphoreGive(sdCardMutex);
       return false;
     }
@@ -89,7 +89,8 @@ bool writeAudioDataToSD(int16_t* pcmData, size_t bytesToWrite) {
     
     if (bytesWritten != bytesToWrite) {
       Serial.println("Fehler beim Schreiben auf die SD-Karte!");
-      KoKriRec_State == State_RECORDING_ERROR;
+      KoKriRec_State = State_IDLE;
+      setLEDStatus(COLOR_ERROR);
       xSemaphoreGive(sdCardMutex);
       return false;
     } else {
@@ -104,12 +105,6 @@ bool writeAudioDataToSD(int16_t* pcmData, size_t bytesToWrite) {
 
 // Aufnahmedatei finalisieren
 void finalizeRecordingFile() {
-  // Disable I2S interrupt after recording
-  esp_err_t err = disable_i2s_interrupt();
-  if (err != ESP_OK) {
-    Serial.println("Warning: Failed to disable I2S interrupt");
-  }
-
   if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
     // WAV-Header aktualisieren
     updateWAVHeader();
@@ -132,55 +127,75 @@ void finalizeRecordingFile() {
 
 // Aufnahme starten und Datei öffnen
 bool startRecording() {
-  // Enable I2S interrupt before starting recording
-  esp_err_t err = enable_i2s_interrupt();
-  if (err != ESP_OK) {
-    Serial.println("Failed to enable I2S interrupt");
-    return false;
-  }
-
-  xQueueReset(audioQueue); 
-
-  vTaskDelay(pdMS_TO_TICKS(10));
-
-  recordingStartTime = millis();
-
-  sprintf(filename, "/%s_%08lu.wav", config.deviceName, recordingStartTime/100);
-  
-
-  if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
-    // Öffne die Datei zum Schreiben
-    wavFile = SD.open(filename, FILE_WRITE);
+    // Queue leeren vor Start
+    xQueueReset(audioQueue);
     
-    if (!wavFile) {
-      Serial.println("Fehler beim Öffnen der Datei!");
-      KoKriRec_State = State_RECORDING_ERROR;
-      xSemaphoreGive(sdCardMutex);
-      return false;
-    }
-    
-    // WAV-Header schreiben
-    writeWAVHeader();
-    xSemaphoreGive(sdCardMutex);
-    
-    dataSize = 0;
-    
-    setLEDStatus(COLOR_RECORDING);
-    // Starte den Aufnahme-Task mit hoher Priorität
+    // Sofort Mic Task starten
+    TaskHandle_t micHandle;
     xTaskCreate(
-      recordingTask,
-      "Recording Task",
-      8192,
-      NULL,
-      RECORDING_TASK_PRIORITY,
-      NULL
+        microphoneTask,
+        "Microphone Task",
+        8192,
+        NULL,
+        MIC_TASK_PRIORITY,
+        &micHandle
     );
 
-    Serial.printf("Starte Aufnahme: %s\n", filename);
-    return true;
+    // Kurz warten bis erste Samples da sind
+    vTaskDelay(pdMS_TO_TICKS(5));
+    
+    recordingStartTime = millis();
+    sprintf(filename, "/%s_%08lu.wav", config.deviceName, recordingStartTime/100);
+
+
+      if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
+
+        wavFile = SD.open(filename, FILE_WRITE);
+        if (!wavFile) {
+            Serial.println("Fehler beim Öffnen der Datei!");
+            setLEDStatus(COLOR_ERROR);
+            xSemaphoreGive(sdCardMutex);
+            return false;
+        }
+        
+        // WAV-Header schreiben
+        writeWAVHeader();
+        xSemaphoreGive(sdCardMutex);
+        
+        dataSize = 0;
+        KoKriRec_State = State_RECORDING;
+        
+        // LED auf Aufnahme-Status setzen
+        setLEDStatus(COLOR_RECORDING);
+        
+        // Starte den Aufnahme-Task mit hoher Priorität
+        xTaskCreate(
+          recordingTask,
+          "Recording Task",
+          8192,
+          NULL,
+          RECORDING_TASK_PRIORITY,
+          NULL
+        );
+        Serial.printf("Starte Aufnahme: %s\n", filename);
+        return true;
+    }
+    
+    return false;
+}
+
+// Aufnahme beenden 
+void stopRecording() {
+  if (KoKriRec_State == State_RECORDING) {
+    KoKriRec_State == State_IDLE;
+    // Der Aufnahme-Task wird sich selbst beenden, wenn KoKriRec_State nicht State_RECORDING ist
+    
+    // Warte kurz, um sicherzustellen, dass der Aufnahme-Task abgeschlossen ist
+    delay(100);
+    
+    // LED auf Bereit-Status zurücksetzen
+    setLEDStatus(COLOR_READY);
   }
-  
-  return false;
 }
 
 #endif // SDCARD_H
