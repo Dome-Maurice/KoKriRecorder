@@ -87,5 +87,13 @@ void updateLEDFromAudio(int32_t sum, int32_t peak, int numSamples) {
     FastLED.show();
 }
 
+void sinelon(byte gHue)
+{
+  // a colored dot sweeping back and forth, with fading trails
+  fadeToBlackBy( effektleds, EFFEKT_LED_NUM, 20);
+  int pos = beatsin16( 13, 0, EFFEKT_LED_NUM-1 );
+  effektleds[pos] += CHSV( gHue, 255, 192);
+  
+}
 
 #endif // LED_H

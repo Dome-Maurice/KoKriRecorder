@@ -30,15 +30,15 @@
 // WS2812 LED-Konfiguration
 #define LED_TYPE WS2812   // LED-Typ
 #define STATUS_LED_PIN         48       // Pin für die WS2812-LED  
-#define COLOR_ORDER     GRB      // Farbreihenfolge (meistens GRB bei WS2812)
+#define COLOR_ORDER            GRB      // Farbreihenfolge (meistens GRB bei WS2812)
 #define EFFEKT_LED_PIN         20
 #define EFFEKT_LED_NUM         12
 
 // Status-Farben
 #define COLOR_IDLE                  CRGB::Green
-#define COLOR_RECORDING             CRGB::RED
+#define COLOR_RECORDING             CRGB::Red
 #define COLOR_ERROR                 CRGB::Orange
-#define COLOR_KRISTALL_IDLE         CRGB::Darkblue
+#define COLOR_KRISTALL_IDLE         CRGB::DarkBlue
 #define COLOR_KRISTALL_UPLOADING    CRGB::Cyan
 
 // Task-Prioritäten

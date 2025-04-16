@@ -96,6 +96,8 @@ void setup() {
   Serial.println("Recorder bereit. Drücke den Button, um die Aufnahme zu starten/stoppen.");
 }
 
+byte hue = 0;
+
 void loop() {
 
     switch (KoKriRec_State){
@@ -111,7 +113,7 @@ void loop() {
         KoKriRec_State = State_KOKRI_SCHALE_UPLOADING;
       }
 
-      idle_Animation(COLOR_IDLE, 1000);
+      sinelon(hue);
 
       break;
 
@@ -154,6 +156,7 @@ void loop() {
       break;
     }
 
+    hue++;
     vTaskDelay(pdMS_TO_TICKS(10));
 
 }
