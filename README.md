@@ -9,12 +9,7 @@
 - ? WS2812 RING mit 16 LEDS
 - ? Powerbank
 
-## FTP 
-Einfacher FTP Server mit pyftpdlib
-- python3 -m pyftpdlib -p 2121 -u Kokri -P Kokri -n 10.2.3.248 -d ftptest/ -r 6000-6001 --write
- 
 ## Pin Belegung
-### Pin Belegung der Komponenten
 
 - **I2S Mikrofon INMP441**
     - WS (Word Select)  -> GPIO 12
@@ -46,3 +41,8 @@ Einfacher FTP Server mit pyftpdlib
     - VCC             -> 5Vin (IN-OUT Lötbrücke muss geschlossen werden um USB Spannung abzugreifen)
     - Data            -> GPIO 48
     - GND             -> GND
+
+## FTP 
+Einfacher FTP Server mit pyftpdlib im Terminal 
+''python3 -m pyftpdlib -p 2121 -u Kokri -P Kokri -n 10.2.3.248 -d ftptest/ -r 6000-6001 --write''
+ 
