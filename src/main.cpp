@@ -15,9 +15,9 @@
 #include "ftp.h"
 #include "button.h"
 #include "sdcard.h" 
- 
 
-CRGB leds[NUM_LEDS];             // Array für WS2812-LED
+CRGB statusled[1];             // Onboard LED
+CRGB effektleds[EFFEKT_LED_NUM];
 
 DeviceState KoKriRec_State = State_INITIALIZING;
 
@@ -146,17 +146,8 @@ void loop() {
       break;
 
     case State_RECORDING_ERROR:
-      idle_Animation(COLOR_ERROR, 100);
-      break;
-
     case State_SD_ERROR:
-      idle_Animation(COLOR_ERROR, 100);
-      break;
-
     case State_FTP_ERROR:
-      idle_Animation(COLOR_ERROR, 100);
-      break;
-
     default:
     case State_ERROR:
       idle_Animation(COLOR_ERROR, 100);

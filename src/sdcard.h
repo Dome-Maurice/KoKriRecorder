@@ -141,6 +141,8 @@ bool startRecording() {
         &micHandle
     );
 
+    // LED auf Aufnahme-Status setzen
+    setLEDStatus(COLOR_RECORDING);
     // Kurz warten bis erste Samples da sind
     vTaskDelay(pdMS_TO_TICKS(5));
     
@@ -165,8 +167,7 @@ bool startRecording() {
         dataSize = 0;
         KoKriRec_State = State_RECORDING;
         
-        // LED auf Aufnahme-Status setzen
-        setLEDStatus(COLOR_RECORDING);
+        
         
         // Starte den Aufnahme-Task mit hoher Priorität
         xTaskCreate(

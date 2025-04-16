@@ -28,10 +28,11 @@
 #define BUTTON_DEBOUNCE_TIME 10 // Entprellzeit in ms
 
 // WS2812 LED-Konfiguration
-#define LED_PIN         48       // Pin für die WS2812-LED
-#define NUM_LEDS        1        // Nur eine LED
-#define LED_TYPE        WS2812   // LED-Typ
+#define LED_TYPE WS2812   // LED-Typ
+#define STATUS_LED_PIN         48       // Pin für die WS2812-LED  
 #define COLOR_ORDER     GRB      // Farbreihenfolge (meistens GRB bei WS2812)
+#define EFFEKT_LED_PIN         20
+#define EFFEKT_LED_NUM         12
 
 // Status-Farben
 #define COLOR_IDLE                  CRGB::Green
