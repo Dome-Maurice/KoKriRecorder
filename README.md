@@ -45,6 +45,5 @@
 
 ## FTP 
 Einfacher FTP Server mit pyftpdlib im Terminal
-'''
-python3 -m pyftpdlib -p 2121 -u Kokri -P Kokri -n 10.2.3.248 -d ftptest/ -r 6000-6001 --write
-'''
+
+    python3 -m pyftpdlib -p 2121 -u Kokri -P Kokri -n 10.2.3.248 -d ftptest/ -r 6000-6001 --write
