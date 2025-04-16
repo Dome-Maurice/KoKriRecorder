@@ -15,9 +15,9 @@
 #include "ftp.h"
 #include "button.h"
 #include "sdcard.h" 
- 
 
-CRGB leds[NUM_LEDS];             // Array für WS2812-LED
+CRGB statusled[1];             // Onboard LED
+CRGB effektleds[EFFEKT_LED_NUM];
 
 DeviceState KoKriRec_State = State_INITIALIZING;
 
@@ -96,23 +96,24 @@ void setup() {
 
 void loop() {
     
-    if (recordButton.isPressed() && KoKriRec_State == State_IDLE) {
-        KoKriRec_State = State_RECORDING;
-        startRecording();
-    }
     
     switch (KoKriRec_State){
     case State_IDLE:
-    
+
+      if (recordButton.isPressed()) {
+        KoKriRec_State = State_RECORDING;
+        startRecording();
+      }
+
       idle_Animation(COLOR_READY, 1000);
 
       break;
 
     case State_RECORDING:
 
-      if (!recordButton.isPressed()) {
-        vTaskDelay(pdMS_TO_TICKS(50)); // Warte auf Abschluss der Aufnahme
+      if (!recordButton.isPressed()) {      
         KoKriRec_State = State_IDLE; // Aufnahme Task wird sich selbst beenden
+        vTaskDelay(pdMS_TO_TICKS(50)); // Warte auf Abschluss der Aufnahme
       }
 
       break;
@@ -130,17 +131,8 @@ void loop() {
       break;
 
     case State_RECORDING_ERROR:
-      idle_Animation(COLOR_ERROR, 100);
-      break;
-
     case State_SD_ERROR:
-      idle_Animation(COLOR_ERROR, 100);
-      break;
-
     case State_FTP_ERROR:
-      idle_Animation(COLOR_ERROR, 100);
-      break;
-
     default:
     case State_ERROR:
       idle_Animation(COLOR_ERROR, 100);
