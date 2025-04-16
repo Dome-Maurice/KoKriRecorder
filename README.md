@@ -1,6 +1,13 @@
 # KoKriRecorder
 
 ## Hardware
+- [ESP32 S3 N16R8](https://de.aliexpress.com/item/1005004751205589.html?spm=a2g0o.order_list.order_list_main.10.626b5c5fY4putL&gatewayAdapt=glo2deu) 
+- IMNP441 MEMS-Mikrofon
+- Mikro SD-Karten Breakoutboard
+- Taster (Aufnahmeknopf)
+- ? Reed-Kontakt (Kristallschale)
+- ? WS2812 RING mit 16 LEDS
+- ? Powerbank
 
 ## FTP 
 Einfacher FTP Server mit pyftpdlib
