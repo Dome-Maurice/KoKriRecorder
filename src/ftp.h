@@ -79,6 +79,13 @@ void FTPuploadTask(void* parameter) {
             }
 
             if(uxQueueMessagesWaiting(uploadQueue) == 0) {
+                if(KoKriRec_State == State_KOKRI_SCHALE_UPLOADING) {
+                    ftpclient.InitFile("Type I");
+                    ftpclient.NewFile(config.deviceName);
+                    ftpclient.CloseFile();
+                    KoKriRec_State = State_KOKRI_SCHALE_IDLE;
+                    Serial.println("Upload abgeschlossen. finish.txt erstellt.");
+                }
                 ftpclient.CloseConnection();
                 Serial.println("Keine weiteren Uploads in der Warteschlange.");
             }
