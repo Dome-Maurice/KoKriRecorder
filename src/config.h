@@ -50,10 +50,6 @@
 #define FTP_TIMEOUT 5000              // Timeout für FTP-Operationen in ms
 #define FTP_BUFFER_SIZE 2000          // Puffergröße für FTP-Übertragungen
 
-// Queue für FTP-Upload-Tasks
-QueueHandle_t uploadQueue;
-SemaphoreHandle_t sdCardMutex;   // Mutex für SD-Karten-Zugriff
-
 // Struktur für die Konfigurationsdaten
 struct RecorderConfig {
     char deviceName[MAX_VALUE_LEN];     // Name des Geräts

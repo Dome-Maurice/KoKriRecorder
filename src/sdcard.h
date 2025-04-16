@@ -4,8 +4,8 @@
 #include <Arduino.h>
 #include <SD.h>
 #include <SPI.h>
-#include "config.h"
-#include "recording.h"  // Neue Header-Datei für gemeinsame Funktionen
+
+SemaphoreHandle_t sdCardMutex;
 
 // SD-Karte initialisieren
 bool initSDCard() {

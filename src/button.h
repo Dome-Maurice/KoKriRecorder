@@ -3,7 +3,6 @@
 
 #include <Arduino.h>
 #include "config.h"
-#include "recording.h"
 
 class Button {
 private:

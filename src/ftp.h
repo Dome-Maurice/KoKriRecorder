@@ -7,8 +7,8 @@
 #include "led.h"
 
 extern SemaphoreHandle_t sdCardMutex;
-extern QueueHandle_t uploadQueue;
 
+QueueHandle_t uploadQueue;
 
 void FTPuploadTask(void* parameter) {
 

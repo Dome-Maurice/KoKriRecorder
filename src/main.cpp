@@ -8,8 +8,8 @@
 #include <ESPAsyncWebServer.h>
 
 #include "config.h"
+#include "audio_manager.h"
 #include "led.h"
-#include "mic.h"
 #include "readconfig.h"
 #include "webserver.h"
 #include "ftp.h"
@@ -22,8 +22,6 @@ CRGB leds[NUM_LEDS];             // Array für WS2812-LED
 DeviceState KoKriRec_State = State_INITIALIZING;
 
 Button recordButton(RECORD_BUTTON_PIN, BUTTON_DEBOUNCE_TIME);
-
-
 
 void setup() {
   Serial.begin(115200);
