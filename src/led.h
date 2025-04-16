@@ -52,8 +52,8 @@ void updateLEDFromAudio(int32_t sum, int32_t peak, int numSamples) {
 
     static byte offset = 0;
     static unsigned long lastUpdate = 0;
-    if (millis() - lastUpdate > 50) {  // Adjust the 50ms delay as needed
-      offset++;
+    if (millis() - lastUpdate > 100) { 
+      offset = (offset + 1) % EFFEKT_LED_NUM;
       lastUpdate = millis();
     }
 
@@ -77,14 +77,12 @@ void updateLEDFromAudio(int32_t sum, int32_t peak, int numSamples) {
         effektleds[i] = CRGB::Black;
     }
 
-    for(int i = 0; i < EFFEKT_LED_NUM/3; i++) {
-        i = (i+offset)%EFFEKT_LED_NUM;
-        effektleds[i] = COLOR_RECORDING;
-        effektleds[i].nscale8(currentBrightness);
-        if (currentBrightness > 180) {
-          effektleds[i].g = map(currentBrightness, 180, 255, 0, 70);
-        }
+    effektleds[offset] = COLOR_RECORDING;
+    effektleds[offset].nscale8(currentBrightness);
+    if (currentBrightness > 180) {
+      effektleds[offset].g = map(currentBrightness, 180, 255, 0, 70);
     }
+    
     
     FastLED.setBrightness(currentBrightness);
     FastLED.show();
