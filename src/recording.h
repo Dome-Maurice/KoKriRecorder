@@ -4,8 +4,6 @@
 #include <Arduino.h>
 #include "config.h"
 
-// Am Anfang der Datei nach den includes
-#define AUDIO_QUEUE_LENGTH 8
 static QueueHandle_t audioQueue = NULL;
 
 // Struktur für Audio-Daten
@@ -39,7 +37,7 @@ void recordingTask(void* parameter) {
   struct AudioData audioData;
   Serial.println("Aufnahme-Task gestartet");
 
-  while (KoKriRec_State == State_RECORDING) {
+  do{
 
     if (xQueueReceive(audioQueue, &audioData, pdMS_TO_TICKS(1)) == pdTRUE) {
       int16_t pcmData[BUFFER_SIZE];
@@ -68,7 +66,7 @@ void recordingTask(void* parameter) {
       size_t bytesToWrite = audioData.bytesRead / 2;
       writeAudioDataToSD(pcmData, bytesToWrite);
     }
-  } 
+  }while (KoKriRec_State == State_RECORDING || uxQueueMessagesWaiting(audioQueue)); 
 
   finalizeRecordingFile(); 
   vTaskDelete(NULL);
