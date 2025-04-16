@@ -194,7 +194,7 @@ void stopRecording() {
     delay(100);
     
     // LED auf Bereit-Status zurücksetzen
-    setLEDStatus(COLOR_READY);
+    setLEDStatus(COLOR_IDLE);
   }
 }
 

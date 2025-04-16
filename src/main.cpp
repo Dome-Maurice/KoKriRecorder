@@ -90,7 +90,7 @@ void setup() {
   }
   
   // Set LED to ready status
-  setLEDStatus(COLOR_READY);
+  setLEDStatus(COLOR_IDLE);
 
   KoKriRec_State = State_IDLE;
   Serial.println("Recorder bereit. Drücke den Button, um die Aufnahme zu starten/stoppen.");
@@ -111,7 +111,7 @@ void loop() {
         KoKriRec_State = State_KOKRI_SCHALE_UPLOADING;
       }
 
-      idle_Animation(COLOR_READY, 1000);
+      idle_Animation(COLOR_IDLE, 1000);
 
       break;
 
@@ -126,7 +126,7 @@ void loop() {
 
     case State_KOKRI_SCHALE_UPLOADING:
 
-      idle_Animation(COLOR_UPLOAD, 500);
+      idle_Animation(COLOR_KRISTALL_UPLOADING, 500);
 
       if(uxQueueMessagesWaiting(uploadQueue) == 0){
         KoKriRec_State = State_KOKRI_SCHALE_IDLE;
@@ -138,7 +138,7 @@ void loop() {
 
     case State_KOKRI_SCHALE_IDLE:
 
-      idle_Animation(CRGB::Cyan, 500);
+      idle_Animation(COLOR_KRISTALL_IDLE, 500);
       if (!LadenschalenKontakt.isPressed()) {
         KoKriRec_State = State_IDLE;
       }

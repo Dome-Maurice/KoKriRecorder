@@ -45,7 +45,6 @@ void idle_Animation(CRGB color, int speed) {
     }
   }
 }
-
 void updateLEDFromAudio(int32_t sum, int32_t peak, int numSamples) {
     if (numSamples <= 0) return;
     

@@ -34,10 +34,11 @@
 #define COLOR_ORDER     GRB      // Farbreihenfolge (meistens GRB bei WS2812)
 
 // Status-Farben
-#define COLOR_READY     CRGB(0, 64, 0)    // Grün (gedimmt) = Bereit
-#define COLOR_RECORDING CRGB(255, 0, 0)   // Rot = Aufnahme
-#define COLOR_ERROR     CRGB(255, 50, 0)  // Orange = Fehler
-#define COLOR_UPLOAD    CRGB(0, 0, 255)   // Blau = Daten werden hochgeladen
+#define COLOR_IDLE                  CRGB::Green
+#define COLOR_RECORDING             CRGB::RED
+#define COLOR_ERROR                 CRGB::Orange
+#define COLOR_KRISTALL_IDLE         CRGB::Darkblue
+#define COLOR_KRISTALL_UPLOADING    CRGB::Cyan
 
 // Task-Prioritäten
 #define MIC_TASK_PRIORITY 4  // Hohe Priorität für Aufnahme-Task
