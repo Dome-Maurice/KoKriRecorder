@@ -22,6 +22,7 @@ CRGB leds[NUM_LEDS];             // Array für WS2812-LED
 DeviceState KoKriRec_State = State_INITIALIZING;
 
 Button recordButton(RECORD_BUTTON_PIN, BUTTON_DEBOUNCE_TIME);
+Button LadenschalenKontakt(LADESCHALEN_KONTAKT_PIN, BUTTON_DEBOUNCE_TIME);
 
 void setup() {
   Serial.begin(115200);
@@ -34,6 +35,7 @@ void setup() {
   
   // Button mit Pull-up-Widerstand
   pinMode(RECORD_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(LADESCHALEN_KONTAKT_PIN, INPUT_PULLUP);
 
   // Erstelle Semaphore für SD-Karten-Zugriff
   sdCardMutex = xSemaphoreCreateMutex();
@@ -95,15 +97,20 @@ void setup() {
 }
 
 void loop() {
-    
-    if (recordButton.isPressed() && KoKriRec_State == State_IDLE) {
-        KoKriRec_State = State_RECORDING;
-        startRecording();
-    }
-    
+
     switch (KoKriRec_State){
     case State_IDLE:
     
+      if (recordButton.isPressed()) {
+        KoKriRec_State = State_RECORDING;
+        startRecording();
+        break;
+      }
+
+      if (LadenschalenKontakt.isPressed()) {
+        KoKriRec_State = State_KOKRI_SCHALE_UPLOADING;
+      }
+
       idle_Animation(COLOR_READY, 1000);
 
       break;
@@ -111,8 +118,8 @@ void loop() {
     case State_RECORDING:
 
       if (!recordButton.isPressed()) {
-        vTaskDelay(pdMS_TO_TICKS(50)); // Warte auf Abschluss der Aufnahme
         KoKriRec_State = State_IDLE; // Aufnahme Task wird sich selbst beenden
+        vTaskDelay(pdMS_TO_TICKS(50)); // Warte auf Abschluss der Aufnahme
       }
 
       break;
@@ -121,11 +128,20 @@ void loop() {
 
       idle_Animation(COLOR_UPLOAD, 500);
 
+      if(uxQueueMessagesWaiting(uploadQueue) == 0){
+        KoKriRec_State = State_KOKRI_SCHALE_IDLE;
+      }
+
+      //FTP Datei Erstellen wenn zu Signalisiserung das fertig geuploaded ist
+
       break;
 
     case State_KOKRI_SCHALE_IDLE:
 
-      idle_Animation(COLOR_READY, 500);
+      idle_Animation(CRGB::Cyan, 500);
+      if (!LadenschalenKontakt.isPressed()) {
+        KoKriRec_State = State_IDLE;
+      }
 
       break;
 

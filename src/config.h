@@ -11,7 +11,7 @@
 #define SAMPLE_RATE     16000    // Sample Rate in Hz (16kHz)
 #define BUFFER_SIZE     1024     // Größe des Aufnahmepuffers
 #define BIT_DEPTH       32       // INMP441 liefert 24-Bit Daten, I2S empfängt als 32-Bit
-#define AUDIO_QUEUE_LENGTH 16
+#define AUDIO_QUEUE_LENGTH 32
 
 // SD-Karten Konfiguration
 #define SD_CS_PIN       4        // SD Card Chip Select Pin
@@ -22,8 +22,9 @@
 #define MAX_VALUE_LEN   64       // Maximale Länge eines Konfigurationswertes
 #define MAX_FILENAME_LEN 32      // Maximale Länge des Dateinamens
 
-// Button für Aufnahmesteuerung
-#define RECORD_BUTTON_PIN 9      // Button-Pin für Aufnahmesteuerung
+// Button
+#define RECORD_BUTTON_PIN 9     // Button-Pin für Aufnahmesteuerung
+#define LADESCHALEN_KONTAKT_PIN 10  // Pin für Ladenschalen Reedkontakt
 #define BUTTON_DEBOUNCE_TIME 10 // Entprellzeit in ms
 
 // WS2812 LED-Konfiguration
