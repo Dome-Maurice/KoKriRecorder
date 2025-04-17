@@ -6,6 +6,42 @@
 #include <SPI.h>
 
 SemaphoreHandle_t sdCardMutex;
+uint32_t FileNumber = 0;
+
+// Funktion, um die höchste Dateinummer auf der SD-Karte zu finden
+uint32_t getHighestFileNumber() {
+  uint32_t highestNumber = 0;
+
+  if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
+      File root = SD.open("/");
+      if (!root) {
+          Serial.println("Fehler beim Öffnen des Root-Verzeichnisses!");
+          xSemaphoreGive(sdCardMutex);
+          return highestNumber;
+      }
+
+      File file = root.openNextFile();
+      while (file) {
+          if (!file.isDirectory()) {
+              const char* name = file.name();
+              uint32_t fileNumber = 0;
+
+              // Prüfen, ob der Dateiname das Muster "xyz_XXXXXXXX.wav" hat
+              if (sscanf(name, "%*[^_]_%08u.wav", &fileNumber) == 1) {
+                  if (fileNumber > highestNumber) {
+                      highestNumber = fileNumber;
+                  }
+              }
+          }
+          file = root.openNextFile();
+      }
+
+      root.close();
+      xSemaphoreGive(sdCardMutex);
+  }
+
+  return highestNumber;
+}
 
 // SD-Karte initialisieren
 bool initSDCard() {
@@ -45,6 +81,8 @@ bool initSDCard() {
     
     xSemaphoreGive(sdCardMutex);
   }
+
+  FileNumber = getHighestFileNumber();// Überprüfe, ob die SD-Karte erfolgreich initialisiert wurd
 
   return true; 
 }
@@ -103,6 +141,8 @@ bool writeAudioDataToSD(int16_t* pcmData, size_t bytesToWrite) {
   return false;
 }
 
+
+
 // Aufnahmedatei finalisieren
 void finalizeRecordingFile() {
   if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
@@ -147,10 +187,13 @@ bool startRecording() {
     vTaskDelay(pdMS_TO_TICKS(5));
     
     recordingStartTime = millis();
-    sprintf(filename, "/%s_%08lu.wav", config.deviceName, recordingStartTime/100);
+    
+    FileNumber++;
 
+    // Generiere neuen Dateinamen mit fortlaufender Nummer
+    sprintf(filename, "/%s_%08lu.wav", config.deviceName, FileNumber);
 
-      if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
+    if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
 
         wavFile = SD.open(filename, FILE_WRITE);
         if (!wavFile) {
@@ -198,5 +241,7 @@ void stopRecording() {
     setLEDStatus(COLOR_IDLE);
   }
 }
+
+
 
 #endif // SDCARD_H
