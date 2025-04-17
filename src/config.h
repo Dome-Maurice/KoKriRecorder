@@ -11,7 +11,7 @@
 #define SAMPLE_RATE     16000    // Sample Rate in Hz (16kHz)
 #define BUFFER_SIZE     1024     // Größe des Aufnahmepuffers
 #define BIT_DEPTH       32       // INMP441 liefert 24-Bit Daten, I2S empfängt als 32-Bit
-#define AUDIO_QUEUE_LENGTH 32
+#define AUDIO_QUEUE_LENGTH 64
 
 // SD-Karten Konfiguration
 #define SD_CS_PIN       4        // SD Card Chip Select Pin

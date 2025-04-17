@@ -146,7 +146,7 @@ void microphoneTask(void* parameter) {
                 Serial.println("Queue voll!");
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(40));
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
     vTaskDelete(NULL);
 }

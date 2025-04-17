@@ -54,7 +54,8 @@ void FTPuploadTask(void* parameter) {
                             break;
                         }
 
-                        vTaskDelay(pdMS_TO_TICKS(1));
+                        //vTaskDelay(pdMS_TO_TICKS(1));
+                        taskYIELD();
                     }
                     
                     ftpclient.CloseFile();

@@ -39,7 +39,7 @@
     - Data            -> GPIO 20
     - GND             -> GND
 - **WS2812 LED Status Onboard**
-    - VCC             -> 5Vin (IN-OUT Lötbrücke muss geschlossen werden um USB Spannung abzugreifen)
+    - VCC             -> 5Vin
     - Data            -> GPIO 48
     - GND             -> GND
 
