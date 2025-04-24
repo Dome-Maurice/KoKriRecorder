@@ -113,7 +113,7 @@ void loop() {
         KoKriRec_State = State_KOKRI_SCHALE_UPLOADING;
       }
 
-      sinelon(hue);
+      updateAnimation(2);
 
       break;
 
