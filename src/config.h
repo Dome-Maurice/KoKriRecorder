@@ -34,12 +34,23 @@
 #define EFFEKT_LED_PIN         20
 #define EFFEKT_LED_NUM         12
 
-// Status-Farben
-#define COLOR_IDLE                  CRGB::Green
-#define COLOR_RECORDING             CRGB::Red
-#define COLOR_ERROR                 CRGB::Orange
-#define COLOR_KRISTALL_IDLE         CRGB::DarkBlue
-#define COLOR_KRISTALL_UPLOADING    CRGB::Cyan
+// HSV Farbdefinitionen (Hue: 0-255, Saturation: 0-255, Value: 0-255)
+#define BASE_VAL 30        // Basis-Helligkeit für Animationen
+#define HIGHLIGHT_VAL 255  // Highlight-Helligkeit für Animationen
+
+// Status-Farben als HSV
+#define COLOR_IDLE                  CHSV(96, 240, BASE_VAL)      // Grün
+#define COLOR_RECORDING             CHSV(0, 255, BASE_VAL)       // Rot
+#define COLOR_ERROR                 CHSV(0, 255, BASE_VAL)       // Rot
+#define COLOR_KRISTALL_IDLE         CHSV(160, 255, BASE_VAL)     // Türkis
+#define COLOR_KRISTALL_UPLOADING    CHSV(190, 255, BASE_VAL)     // Blau-Türkis
+
+// Highlight-Farben für Animationen
+#define COLOR_IDLE_HIGHLIGHT                  CHSV(96, 255, HIGHLIGHT_VAL)
+#define COLOR_RECORDING_HIGHLIGHT             CHSV(0, 255, HIGHLIGHT_VAL)
+#define COLOR_ERROR_HIGHLIGHT                 CHSV(0, 255, HIGHLIGHT_VAL)
+#define COLOR_KRISTALL_IDLE_HIGHLIGHT         CHSV(160, 255, HIGHLIGHT_VAL)
+#define COLOR_KRISTALL_UPLOADING_HIGHLIGHT    CHSV(190, 255, HIGHLIGHT_VAL)
 
 // Task-Prioritäten
 #define MIC_TASK_PRIORITY 4  // Hohe Priorität für Aufnahme-Task

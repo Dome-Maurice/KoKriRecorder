@@ -96,55 +96,72 @@ void setup() {
   Serial.println("Recorder bereit. Drücke den Button, um die Aufnahme zu starten/stoppen.");
 }
 
-byte hue = 0;
+// Füge State-Tracking hinzu
+static DeviceState lastState = State_INITIALIZING;
 
 void loop() {
 
-    switch (KoKriRec_State){
+  // Prüfe auf State-Änderung
+  if (lastState != KoKriRec_State) {
+    // Aktualisiere Farben nur bei State-Änderung
+    switch (KoKriRec_State) {
+      case State_IDLE:
+        updateStateColor(96, 240, 40, 200);  // Grün
+        break;
+      case State_RECORDING:
+        updateStateColor(0, 255, 40, 200);   // Rot
+        break;
+      case State_KOKRI_SCHALE_UPLOADING:
+        updateStateColor(160, 255, 40, 200); // Türkis
+        break;
+      case State_KOKRI_SCHALE_IDLE:
+        updateStateColor(190, 255, 40, 200); // Blau-Türkis
+        break;
+      case State_RECORDING_ERROR:
+      case State_SD_ERROR:
+      case State_FTP_ERROR:
+      default:
+      case State_ERROR:
+        updateStateColor(0, 255, 40, 150);   // Gedämpftes Rot
+        break;
+    }
+    lastState = KoKriRec_State;
+  }
+
+  // State-spezifische Logik ohne Farbaktualisierung
+  switch (KoKriRec_State) {
     case State_IDLE:
-    
+      updateAnimation(2);
       if (recordButton.isPressed()) {
         KoKriRec_State = State_RECORDING;
         startRecording();
         break;
       }
-
       if (LadenschalenKontakt.isPressed()) {
         KoKriRec_State = State_KOKRI_SCHALE_UPLOADING;
       }
-
-      updateAnimation(2);
-
       break;
 
     case State_RECORDING:
-
+      updateAnimation((int)(smoothedAudioLevel));
       if (!recordButton.isPressed()) {
-        KoKriRec_State = State_IDLE; // Aufnahme Task wird sich selbst beenden
-        vTaskDelay(pdMS_TO_TICKS(50)); // Warte auf Abschluss der Aufnahme
+        KoKriRec_State = State_IDLE;
+        vTaskDelay(pdMS_TO_TICKS(50));
       }
-
       break;
 
     case State_KOKRI_SCHALE_UPLOADING:
-
-      idle_Animation(COLOR_KRISTALL_UPLOADING, 500);
-
-      if(uxQueueMessagesWaiting(uploadQueue) == 0){
+      updateAnimation(2);
+      if(uxQueueMessagesWaiting(uploadQueue) == 0) {
         KoKriRec_State = State_KOKRI_SCHALE_IDLE;
       }
-
-      //FTP Datei Erstellen wenn zu Signalisiserung das fertig geuploaded ist
-
       break;
 
     case State_KOKRI_SCHALE_IDLE:
-
-      idle_Animation(COLOR_KRISTALL_IDLE, 500);
+      updateAnimation(2);
       if (!LadenschalenKontakt.isPressed()) {
         KoKriRec_State = State_IDLE;
       }
-
       break;
 
     case State_RECORDING_ERROR:
@@ -152,11 +169,9 @@ void loop() {
     case State_FTP_ERROR:
     default:
     case State_ERROR:
-      idle_Animation(COLOR_ERROR, 100);
+
       break;
-    }
-
-    hue++;
-    vTaskDelay(pdMS_TO_TICKS(10));
-
+  }
+  
+  vTaskDelay(pdMS_TO_TICKS(10));
 }

@@ -7,6 +7,10 @@ File wavFile;
 unsigned long dataSize = 0;
 uint32_t recordingStartTime = 0;
 
+volatile int currentAudioLevel = 0;
+volatile int peakAudioLevel = 0;
+volatile float smoothedAudioLevel = 0;
+
 bool initI2S() {
     i2s_config_t i2s_config = {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX),
@@ -123,11 +127,15 @@ void recordingTask(void* parameter) {
                 
                 pcmData[i] = (int16_t)sample;
             }
-            
-            updateLEDFromAudio(sum, peak, audioData.bytesRead / 4);
 
             size_t bytesToWrite = audioData.bytesRead / 2;
             writeAudioDataToSD(pcmData, bytesToWrite);
+
+            // Aktualisiere globale Audio-Level
+            currentAudioLevel = constrain((sum / (audioData.bytesRead / 4)) >> AUDIO_SCALE_FACTOR, 0, 255);
+            peakAudioLevel = constrain(peak >> AUDIO_SCALE_FACTOR, 0, 255);
+            smoothedAudioLevel = (smoothedAudioLevel * AUDIO_SMOOTHING_FACTOR) + 
+                               (currentAudioLevel * (1.0f - AUDIO_SMOOTHING_FACTOR));
         }
     } while (KoKriRec_State == State_RECORDING || uxQueueMessagesWaiting(audioQueue));
 

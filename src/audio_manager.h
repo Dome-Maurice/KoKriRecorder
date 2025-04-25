@@ -25,6 +25,15 @@ extern unsigned long dataSize;
 extern uint32_t recordingStartTime;
 extern QueueHandle_t audioQueue;
 
+// Globale Audio-Level Variablen
+extern volatile int currentAudioLevel;
+extern volatile int peakAudioLevel;
+extern volatile float smoothedAudioLevel;
+
+// Audio-Level Konstanten
+#define AUDIO_SMOOTHING_FACTOR 0.8f
+#define AUDIO_SCALE_FACTOR 8  // Skalierung der Rohdaten
+
 // Funktionsdeklarationen
 bool initI2S();
 esp_err_t readMicrophoneData(int32_t* samples, size_t* bytesRead);
