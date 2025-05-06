@@ -189,7 +189,7 @@ void updateStatusBlink() {
       blinkInterval = 1000; // 1 second
       break;
     case BLINK_FAST:
-      blinkInterval = 50;  // 20 HZ
+      blinkInterval = 200;  
       break;
     default:
       return;

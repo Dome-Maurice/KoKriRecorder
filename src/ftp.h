@@ -97,10 +97,8 @@ void FTPuploadTask(void* parameter) {
     char tempFilename[MAX_FILENAME_LEN+5];
     ESP32_FTPClient ftpclient(config.ftpServer, config.ftpPort, config.ftpUser, config.ftpPassword, FTP_TIMEOUT, 1);
     
-    while (true) { // Changed to infinite loop
-        // Check if WiFi is connected
+    while (true) {
         if (WiFi.status() == WL_CONNECTED) {
-            // Try to process files from queue if there are any
 
             if(!ftpclient.isConnected()) {
                 ftpclient.OpenConnection();
@@ -108,8 +106,6 @@ void FTPuploadTask(void* parameter) {
             }          
 
             if (xQueuePeek(uploadQueue, uploadFilename, 0) == pdTRUE && ftpclient.isConnected()) {
-                // Set blink state to fast when actively uploading
-                currentBlinkState = BLINK_FAST;
 
                 Serial.printf("Uploading: %s\n", uploadFilename);
                 snprintf(tempFilename, sizeof(tempFilename), "/%s.temp", uploadFilename);
@@ -121,7 +117,8 @@ void FTPuploadTask(void* parameter) {
                     if (fileToUpload) {
                         uint32_t fileSize = fileToUpload.size();
                         xSemaphoreGive(sdCardMutex);
-
+                        
+                        currentBlinkState = BLINK_FAST;  // Aktiver Upload
                         Serial.printf("Datei zum Upload: %s, Größe: %u kB\n", uploadFilename, fileSize/1000);                  
 
                         ftpclient.InitFile("Type I");
@@ -133,6 +130,7 @@ void FTPuploadTask(void* parameter) {
                         vTaskDelay(pdMS_TO_TICKS(50));
 
                         while (bytesUploaded < fileSize) {
+                            
                             if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
                                 size_t bytesRead = fileToUpload.read(buffer, sizeof(buffer));
                                 xSemaphoreGive(sdCardMutex);  
@@ -166,12 +164,13 @@ void FTPuploadTask(void* parameter) {
                 }
                 
                 if(!uploadSuccess) {
-                    currentBlinkState = BLINK_SLOW;  // Back to slow blink if failed
+                    currentBlinkState = BLINK_SLOW;  // Zurück zu langsam bei Fehler
                     vTaskDelay(pdMS_TO_TICKS(FTP_TIMEOUT));
                     Serial.printf("Upload fehlgeschlagen. Datei %s wird erneut in die Warteschlange gestellt.\n", uploadFilename);
                 }
 
                 if(uxQueueMessagesWaiting(uploadQueue) == 0) {
+                    currentBlinkState = BLINK_NONE;  // Alles fertig
                     if(KoKriRec_State == State_KOKRI_SCHALE_UPLOADING) {
                         ftpclient.InitFile("Type I");
                         ftpclient.NewFile(config.deviceName);
@@ -187,7 +186,6 @@ void FTPuploadTask(void* parameter) {
             vTaskDelay(pdMS_TO_TICKS(1000));
         }
         
-        // Small delay to prevent task from hogging CPU
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
