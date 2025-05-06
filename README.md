@@ -1,5 +1,34 @@
 # KoKriRecorder
 
+## KoKriRecorder LED Status Anleitung
+
+### Status LED Farben und Muster
+
+#### Initialisierung
+- Gelb: System wird initialisiert
+- Blinken zwischen Rot und Gelb: Warten auf WLAN-Verbindung (WLAN-Verbindung wird bei der Initialisierung benötigt)
+- Blinke zwischen Rot und Blau: Test der FTP Verbindung
+- Grün: Bereit zur Verwendung
+
+#### Fehlerzustände
+- Rot: Mikrofon-Initialisierung fehlgeschlagen
+- Blau: SD-Karten-Initialisierung fehlgeschlagen
+- Türkis: Fehler beim Lesen der Konfiguration
+- Rot (gedimmt): Allgemeiner Fehlerzustand
+
+#### LED Ring
+- Grün pulsierend: Gerät ist im Leerlauf und bereit
+- Rot pulsierend: Aktuelle Aufnahme läuft
+##### Deaktiviert
+- Türkis pulsierend (HSV: 160, 255, 40): Dateien werden hochgeladen
+- Blau-Türkis pulsierend (HSV: 190, 255, 40): Ladeschalen-Modus aktiv
+
+#### Status LED
+- Status LED blinkt in Statusfarbe: Dateien warten in der Upload-Warteschlange
+    - Online-Status: Grün
+    - Offline-Status: Gelb
+    - FTP-Error:    : Blue
+
 ## Hardware
 - [ESP32 S3 N16R8](https://de.aliexpress.com/item/1005004751205589.html?spm=a2g0o.order_list.order_list_main.10.626b5c5fY4putL&gatewayAdapt=glo2deu) 
 - IMNP441 MEMS-Mikrofon

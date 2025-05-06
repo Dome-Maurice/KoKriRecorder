@@ -52,6 +52,12 @@
 #define COLOR_KRISTALL_IDLE_HIGHLIGHT         CHSV(160, 255, HIGHLIGHT_VAL)
 #define COLOR_KRISTALL_UPLOADING_HIGHLIGHT    CHSV(190, 255, HIGHLIGHT_VAL)
 
+// Basic colors for status LED
+#define STATUS_LED_ONLINE     CHSV(96, 255, BASE_VAL)  // Online
+#define STATUS_LED_OFFLINE    CHSV(64, 255, BASE_VAL)  // Offline
+#define STATUS_LED_FTP_ERROR  CHSV(160, 255, BASE_VAL)    // FTP Error (Blue)
+#define BLACK     CRGB(0, 0, 0)  
+
 // Task-Prioritäten
 #define MIC_TASK_PRIORITY 4  // Hohe Priorität für Aufnahme-Task
 #define RECORDING_TASK_PRIORITY 3  // Hohe Priorität für Aufnahme-Task

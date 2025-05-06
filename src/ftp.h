@@ -13,6 +13,54 @@ QueueHandle_t uploadQueue;
 // Minimum signal strength threshold in dBm
 const int MIN_RSSI = -70;  // Adjust this value as needed (-70 dBm is a good starting point)
 
+bool testFTPConnection() {
+    Serial.println("Testing FTP connection...");
+    
+    if (!config.ftpEnabled) {
+        Serial.println("FTP is disabled in config");
+        return false;
+    }
+
+    ESP32_FTPClient ftpclient(
+        config.ftpServer,
+        config.ftpPort,
+        config.ftpUser,
+        config.ftpPassword,
+        FTP_TIMEOUT,
+        1
+    );
+
+    // Try to connect
+    Serial.printf("Connecting to FTP server %s:%d...\n", config.ftpServer, config.ftpPort);
+    ftpclient.OpenConnection();
+    
+    delay(500);
+
+    if (!ftpclient.isConnected()) {
+        Serial.println("Failed to connect to FTP server");
+        return false;
+    }
+    
+    // Try to create a test file with device name
+    const char* testFileName = (String("/" + String(config.deviceName) + "_test.txt")).c_str();
+    Serial.printf("Creating test file: %s\n", testFileName);
+    
+    ftpclient.InitFile("Type I");
+    ftpclient.NewFile(testFileName);
+    ftpclient.WriteData((uint8_t*)"test", 4);
+    ftpclient.CloseFile();
+    
+    // Try to delete the test file
+    Serial.println("Deleting test file...");
+    ftpclient.DeleteFile(testFileName);
+    
+    // Close connection
+    ftpclient.CloseConnection();
+    
+    Serial.println("FTP connection test successful!");
+    return true;
+}
+
 // Function to get signal quality description
 String getSignalQuality(int rssi) {
     if (rssi >= -50) return "#####";
@@ -123,7 +171,7 @@ void FTPuploadTask(void* parameter) {
 
                         ftpclient.InitFile("Type I");
                         ftpclient.NewFile(tempFilename);
-                        
+
                         uint32_t bytesUploaded = 0;
                         uint8_t buffer[FTP_BUFFER_SIZE];             
 

@@ -76,18 +76,6 @@ void setup() {
     }
   }
 
-  if(config.ftpEnabled){
-    // Starte Upload-Task mit niedrigerer Priorität
-    xTaskCreate(
-      FTPuploadTask,
-      "FTP Upload Task",
-      8192,
-      NULL,
-      UPLOAD_TASK_PRIORITY,
-      NULL
-    );
-  }
-
   // Start WiFi control task
   xTaskCreate(
     WiFiControlTask,
@@ -97,13 +85,39 @@ void setup() {
     UPLOAD_TASK_PRIORITY,  // Same priority as FTP task
     NULL
   );
-  
+
   while(WiFi.status() != WL_CONNECTED) {
     Serial.println("WLAN nicht verbunden. Warte auf Verbindung...");
     delay(500);
-    setLEDStatus(CRGB::Black);
+    setLEDStatus(CRGB::Red);
     delay(500);
     setLEDStatus(CRGB::Yellow);
+  }
+
+  if (config.ftpEnabled) {
+    while(true){
+      int retrytimer = 0;
+      if(testFTPConnection()){
+        Serial.println("FTP test successful!");
+        xTaskCreate(
+          FTPuploadTask,
+          "FTP Upload Task",
+          8192,
+          NULL,
+          UPLOAD_TASK_PRIORITY,
+          NULL
+        );
+        break;
+      }
+      do{
+        Serial.printf("Retrying FTP connection in %d seconds...\n", 5 - retrytimer);
+        delay(500);
+        setLEDStatus(CRGB::Blue);
+        delay(500);
+        setLEDStatus(CRGB::Red);
+        retrytimer++;
+      }while (retrytimer <= 5);
+    }
   }
 
   if(config.webserverEnabled){
@@ -130,17 +144,17 @@ void loop() {
 
   updateStatusBlink();
 
-  if (WiFi.status() == WL_CONNECTED) {
+  if (WiFi.status() == WL_CONNECTED) {   
     if (currentBlinkState != BLINK_NONE) {
-      setLEDStatus(ledBlinkState ? CRGB::Black : CRGB::Green);
+      setLEDStatus(ledBlinkState ? BLACK : STATUS_LED_ONLINE);
     } else {
-      setLEDStatus(CRGB::Green);
+      setLEDStatus(STATUS_LED_ONLINE);
     }
   } else {
     if (currentBlinkState != BLINK_NONE) {
-      setLEDStatus(ledBlinkState ? CRGB::Black : CRGB::Yellow);
+      setLEDStatus(ledBlinkState ? BLACK : STATUS_LED_OFFLINE);
     } else {
-      setLEDStatus(CRGB::Yellow);
+      setLEDStatus(STATUS_LED_OFFLINE);
     }
   }
 
