@@ -101,7 +101,13 @@ void FTPuploadTask(void* parameter) {
         // Check if WiFi is connected
         if (WiFi.status() == WL_CONNECTED) {
             // Try to process files from queue if there are any
-            if (xQueuePeek(uploadQueue, uploadFilename, 0) == pdTRUE) {
+
+            if(!ftpclient.isConnected()) {
+                ftpclient.OpenConnection();
+                vTaskDelay(pdMS_TO_TICKS(200));
+            }          
+
+            if (xQueuePeek(uploadQueue, uploadFilename, 0) == pdTRUE && ftpclient.isConnected()) {
                 // Set blink state to fast when actively uploading
                 currentBlinkState = BLINK_FAST;
 
@@ -118,15 +124,13 @@ void FTPuploadTask(void* parameter) {
 
                         Serial.printf("Datei zum Upload: %s, Größe: %u kB\n", uploadFilename, fileSize/1000);                  
 
-                        if(!ftpclient.isConnected()) {
-                            ftpclient.OpenConnection();
-                        }
-
                         ftpclient.InitFile("Type I");
                         ftpclient.NewFile(tempFilename);
                         
                         uint32_t bytesUploaded = 0;
                         uint8_t buffer[FTP_BUFFER_SIZE];             
+
+                        vTaskDelay(pdMS_TO_TICKS(50));
 
                         while (bytesUploaded < fileSize) {
                             if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) == pdTRUE) {
@@ -175,7 +179,6 @@ void FTPuploadTask(void* parameter) {
                         KoKriRec_State = State_KOKRI_SCHALE_IDLE;
                         Serial.println("Upload abgeschlossen. finish.txt erstellt.");
                     }
-                    ftpclient.CloseConnection();
                     Serial.println("Keine weiteren Uploads in der Warteschlange.");
                 }
             }
@@ -198,7 +201,7 @@ void WiFiControlTask(void* parameter) {
     while (true) {
         // If we're connected, check if we're still connected
         if (WiFi.status() == WL_CONNECTED) {
-            Serial.println("Still connected to WiFi");
+            //Serial.println("Still connected to WiFi");
         } else {
             // If we're not connected, scan for networks
             scanNetworks();
