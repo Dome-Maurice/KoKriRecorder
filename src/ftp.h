@@ -41,18 +41,14 @@ bool testFTPConnection() {
         return false;
     }
     
-    // Try to create a test file with device name
-    const char* testFileName = (String("/" + String(config.deviceName) + "_test.txt")).c_str();
-    Serial.printf("Creating test file: %s\n", testFileName);
-    
     ftpclient.InitFile("Type I");
-    ftpclient.NewFile(testFileName);
+    ftpclient.NewFile(config.deviceName);
     ftpclient.WriteData((uint8_t*)"test", 4);
     ftpclient.CloseFile();
     
     // Try to delete the test file
     Serial.println("Deleting test file...");
-    ftpclient.DeleteFile(testFileName);
+    ftpclient.DeleteFile(config.deviceName);
     
     // Close connection
     ftpclient.CloseConnection();
