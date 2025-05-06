@@ -19,6 +19,7 @@ bool loadConfigFromSD() {
     config.ftpPort = 21;
     config.ftpEnabled = false;
     config.webserverEnabled = false;
+    config.audioGain = 0.5f;  // Standardwert für audioGain
     
     // Prüfen, ob SD-Karte bereit ist
     if (xSemaphoreTake(sdCardMutex, portMAX_DELAY) != pdTRUE) {
@@ -51,6 +52,8 @@ bool loadConfigFromSD() {
             configFile.println("ftpPort=21");
             configFile.println("# Webserver Konfiguration");
             configFile.println("webServerEnabled=false");
+            configFile.println("# Audio Konfiguration");
+            configFile.println("audioGain=0.5");
             configFile.close();
             Serial.println("Beispiel-Konfigurationsdatei erstellt");
         } else {
@@ -134,6 +137,8 @@ bool loadConfigFromSD() {
                             } else {
                                 config.webserverEnabled = false;
                             }
+                        } else if (strcmp(key, "audioGain") == 0) {
+                            config.audioGain = atof(value);
                         }
                     }
                 }
@@ -162,6 +167,7 @@ bool loadConfigFromSD() {
     Serial.printf("  FTP Passwort: %s\n", config.ftpPassword);
     Serial.printf("  FTP Port: %u\n", config.ftpPort);
     Serial.printf("  Webserver aktiviert: %s\n", config.webserverEnabled ? "Ja" : "Nein");
+    Serial.printf("  Audio Gain: %.2f\n", config.audioGain);
     
     return true;
 }

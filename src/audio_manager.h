@@ -18,6 +18,8 @@ extern unsigned long fileSize;
 extern SemaphoreHandle_t sdCardMutex;
 extern QueueHandle_t uploadQueue;
 
+extern RecorderConfig config;
+
 // Globale Variablen
 extern char filename[MAX_FILENAME_LEN];
 extern File wavFile;

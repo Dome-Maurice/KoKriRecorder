@@ -115,7 +115,7 @@ void recordingTask(void* parameter) {
 
             for (int i = 0; i < audioData.bytesRead / 4; i++) {
                 
-                int32_t sample = int32_t(audioData.samples[i] * 0.2f) >> 8;
+                int32_t sample = int32_t(audioData.samples[i] * config.audioGain) >> 8;
                 int32_t absSample = abs(sample);
                 sum += absSample;
 

@@ -81,6 +81,7 @@ struct RecorderConfig {
     uint16_t ftpPort;                   // FTP Port
     bool ftpEnabled;                    // FTP aktiviert ja/nein
     bool webserverEnabled;              // Webserver aktiviert ja/nein
+    float audioGain;                    // Audio Verstärkungsfaktor
 };
 
 // WAV-Header Struktur
