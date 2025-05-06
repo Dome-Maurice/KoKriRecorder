@@ -22,7 +22,7 @@ CRGB effektleds[EFFEKT_LED_NUM];
 DeviceState KoKriRec_State = State_INITIALIZING;
 
 Button recordButton(RECORD_BUTTON_PIN, BUTTON_DEBOUNCE_TIME);
-Button LadenschalenKontakt(LADESCHALEN_KONTAKT_PIN, BUTTON_DEBOUNCE_TIME);
+//Button LadenschalenKontakt(LADESCHALEN_KONTAKT_PIN, BUTTON_DEBOUNCE_TIME);
 
 volatile BlinkState currentBlinkState = BLINK_NONE;
 volatile bool ledBlinkState = true;
@@ -38,7 +38,7 @@ void setup() {
   
   // Button mit Pull-up-Widerstand
   pinMode(RECORD_BUTTON_PIN, INPUT_PULLUP);
-  pinMode(LADESCHALEN_KONTAKT_PIN, INPUT_PULLUP);
+  //pinMode(LADESCHALEN_KONTAKT_PIN, INPUT_PULLUP);
 
   // Erstelle Semaphore für SD-Karten-Zugriff
   sdCardMutex = xSemaphoreCreateMutex();
@@ -181,9 +181,11 @@ void loop() {
         startRecording();
         break;
       }
+      /*
       if (LadenschalenKontakt.isPressed()) {
         KoKriRec_State = State_KOKRI_SCHALE_UPLOADING;
       }
+      */
       break;
 
     case State_RECORDING:
@@ -203,9 +205,9 @@ void loop() {
 
     case State_KOKRI_SCHALE_IDLE:
       updateAnimation(2);
-      if (!LadenschalenKontakt.isPressed()) {
+      /*if (!LadenschalenKontakt.isPressed()) {
         KoKriRec_State = State_IDLE;
-      }
+      }*/
       break;
 
     case State_RECORDING_ERROR:
