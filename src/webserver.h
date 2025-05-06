@@ -36,20 +36,6 @@ String urlDecode(const String& input) {
   return decoded;
 }
 
-// Verbindung zum WLAN herstellen
-void connectWiFi() {
-  WiFi.begin(config.wifiSSID, config.wifiPassword);
-  Serial.print("Verbinde mit WLAN");
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  Serial.println("\nWLAN verbunden!");
-  Serial.print("IP-Adresse: ");
-  Serial.println(WiFi.localIP());
-}
 
 // Webserver einrichten
 void setupWebServer() {
@@ -137,7 +123,6 @@ void setupWebServer() {
 
 // Initialisiere den Webserver, wenn aktiviert
 void initWebServer() {
-    connectWiFi();
     setupWebServer();
 }
 

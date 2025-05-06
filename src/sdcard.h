@@ -181,8 +181,6 @@ bool startRecording() {
         &micHandle
     );
 
-    // LED auf Aufnahme-Status setzen
-    setLEDStatus(COLOR_RECORDING);
     // Kurz warten bis erste Samples da sind
     vTaskDelay(pdMS_TO_TICKS(5));
     
@@ -237,8 +235,6 @@ void stopRecording() {
     // Warte kurz, um sicherzustellen, dass der Aufnahme-Task abgeschlossen ist
     delay(100);
     
-    // LED auf Bereit-Status zurücksetzen
-    setLEDStatus(COLOR_IDLE);
   }
 }
 

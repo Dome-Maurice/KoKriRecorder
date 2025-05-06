@@ -6,6 +6,16 @@
 #include <algorithm>
 #include "config.h"
 
+// Blink states
+enum BlinkState {
+  BLINK_NONE,
+  BLINK_SLOW,    // Waiting for upload
+  BLINK_FAST     // Uploading
+};
+
+extern volatile BlinkState currentBlinkState;
+extern volatile bool ledBlinkState;
+
 extern CRGB statusled[1];
 extern CRGB effektleds[EFFEKT_LED_NUM];
 extern volatile int peakAudioLevel;
@@ -167,6 +177,28 @@ void updateAnimation(int audio_level) {
         lastUpdate = currentTime;
         FastLED.show();
     }
+}
+
+void updateStatusBlink() {
+  static unsigned long lastBlinkTime = 0;
+  unsigned long currentTime = millis();
+  
+  int blinkInterval = 0;
+  switch(currentBlinkState) {
+    case BLINK_SLOW:
+      blinkInterval = 1000; // 1 second
+      break;
+    case BLINK_FAST:
+      blinkInterval = 50;  // 20 HZ
+      break;
+    default:
+      return;
+  }
+  
+  if(currentTime - lastBlinkTime >= blinkInterval) {
+    ledBlinkState = !ledBlinkState;
+    lastBlinkTime = currentTime;
+  }
 }
 
 #endif // LED_H

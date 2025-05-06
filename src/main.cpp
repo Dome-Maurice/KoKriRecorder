@@ -24,6 +24,9 @@ DeviceState KoKriRec_State = State_INITIALIZING;
 Button recordButton(RECORD_BUTTON_PIN, BUTTON_DEBOUNCE_TIME);
 Button LadenschalenKontakt(LADESCHALEN_KONTAKT_PIN, BUTTON_DEBOUNCE_TIME);
 
+volatile BlinkState currentBlinkState = BLINK_NONE;
+volatile bool ledBlinkState = true;
+
 void setup() {
   Serial.begin(115200);
   delay(500);
@@ -53,10 +56,6 @@ void setup() {
   bool sdOk = initSDCard();
   bool micOk = initI2S();
   bool configReadOk = loadConfigFromSD();
-
-  if(config.webserverEnabled){
-    initWebServer();
-  }
 
   if (!micOk || !sdOk || !configReadOk || audioQueue == NULL) {
     // Mindestens eine Komponente hat Fehler
@@ -88,7 +87,29 @@ void setup() {
       NULL
     );
   }
+
+  // Start WiFi control task
+  xTaskCreate(
+    WiFiControlTask,
+    "WiFi Control Task",
+    8192,
+    NULL,
+    UPLOAD_TASK_PRIORITY,  // Same priority as FTP task
+    NULL
+  );
   
+  while(WiFi.status() != WL_CONNECTED) {
+    Serial.println("WLAN nicht verbunden. Warte auf Verbindung...");
+    delay(500);
+    setLEDStatus(CRGB::Black);
+    delay(500);
+    setLEDStatus(CRGB::Yellow);
+  }
+
+  if(config.webserverEnabled){
+    initWebServer();
+  }
+
   // Set LED to ready status
   setLEDStatus(COLOR_IDLE);
 
@@ -100,6 +121,28 @@ void setup() {
 static DeviceState lastState = State_INITIALIZING;
 
 void loop() {
+  // Update blink state based on queue status
+  if (uxQueueMessagesWaiting(uploadQueue) > 0) {
+    currentBlinkState = BLINK_SLOW;
+  } else {
+    currentBlinkState = BLINK_NONE;
+  }
+
+  updateStatusBlink();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    if (currentBlinkState != BLINK_NONE) {
+      setLEDStatus(ledBlinkState ? CRGB::Black : CRGB::Green);
+    } else {
+      setLEDStatus(CRGB::Green);
+    }
+  } else {
+    if (currentBlinkState != BLINK_NONE) {
+      setLEDStatus(ledBlinkState ? CRGB::Black : CRGB::Yellow);
+    } else {
+      setLEDStatus(CRGB::Yellow);
+    }
+  }
 
   // Prüfe auf State-Änderung
   if (lastState != KoKriRec_State) {
@@ -131,6 +174,7 @@ void loop() {
   // State-spezifische Logik ohne Farbaktualisierung
   switch (KoKriRec_State) {
     case State_IDLE:
+
       updateAnimation(2);
       if (recordButton.isPressed()) {
         KoKriRec_State = State_RECORDING;
